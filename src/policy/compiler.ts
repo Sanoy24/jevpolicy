@@ -161,6 +161,16 @@ function validateSignalCondition(
           'invalid_signal_operator',
         ),
       );
+      return;
+    }
+    if (value < 0 || value > question.criteria.length - 1) {
+      issues.push(
+        issue(
+          `${path}.value`,
+          `score threshold for '${signalName}' must be between 0 and ${question.criteria.length - 1}`,
+          'invalid_score_threshold',
+        ),
+      );
     }
     return;
   }

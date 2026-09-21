@@ -173,6 +173,18 @@ describe('compilePolicy', () => {
     expectIssue(policy, 'unknown_choice_value');
   });
 
+  it('rejects score thresholds outside the declared rubric', () => {
+    const policy = validPolicy();
+    policy['rules'] = [
+      {
+        id: 'invalid-score-threshold',
+        when: { signal: 'complexity', op: 'gte', value: 2.1 },
+        decision: 'human_review',
+      },
+    ];
+    expectIssue(policy, 'invalid_score_threshold');
+  });
+
   it('rejects duplicate IDs across preconditions and rules', () => {
     const policy = validPolicy();
     const rules = policy['rules'] as Array<Record<string, unknown>>;

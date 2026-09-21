@@ -6,8 +6,9 @@ JevPolicy is an open-source TypeScript decision runtime that turns probabilistic
 
 ## Development status
 
-The strict policy compiler and offline validation CLI are available. Runtime
-evaluation, recording, and replay are under active development.
+The strict policy compiler, pure deterministic evaluator, and offline validation
+CLI are available. Provider-backed runtime evaluation, recording, and replay are
+under active development.
 
 ## Getting started
 
@@ -18,6 +19,25 @@ npm install
 npm run cli -- validate examples/support-routing.policy.yaml
 npm run typecheck
 npm test
+```
+
+Pure evaluation is available without network access:
+
+```ts
+import { evaluatePolicy, loadPolicyFile } from '@jevpolicy/core';
+
+const policy = await loadPolicyFile('./policy.yaml');
+const result = evaluatePolicy({
+  policy,
+  facts: { authenticated: true },
+  signals: {
+    category: { type: 'choice', value: 'billing' },
+    urgent: { type: 'boolean', probabilityTrue: 0.82 },
+    complexity: { type: 'score', value: 2.4 },
+  },
+});
+
+console.log(result.decision, result.trace);
 ```
 
 ## Core architecture
