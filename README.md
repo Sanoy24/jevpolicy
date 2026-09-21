@@ -1,10 +1,24 @@
-# JevPolicy — Pre-Build Engineering Kit
+# JevPolicy
 
 > **Code calculates. Jev judges. Policy decides.**
 
 JevPolicy is an open-source TypeScript decision runtime that turns probabilistic judgments from **Jev, accessed through Vercel AI Gateway**, into versioned, deterministic, replayable, observable application decisions.
 
-The repository is implemented milestone by milestone from an accepted, testable design.
+## Development status
+
+The strict policy compiler and offline validation CLI are available. Runtime
+evaluation, recording, and replay are under active development.
+
+## Getting started
+
+Requires Node.js 22.18 or later.
+
+```bash
+npm install
+npm run cli -- validate examples/support-routing.policy.yaml
+npm run typecheck
+npm test
+```
 
 ## Core architecture
 
@@ -92,18 +106,6 @@ ALLOW / REVIEW / DENY / ROUTE / custom action
 - Vitest
 - optional OpenTelemetry API
 
-## Read before coding
+## License
 
-1. `01-PRODUCT-REQUIREMENTS.md`
-2. `02-ARCHITECTURE.md`
-3. `03-POLICY-DSL.md`
-4. `04-DOMAIN-MODEL.md`
-5. `05-RUNTIME-API.md`
-6. `06-REPLAY-AND-SHADOW.md`
-7. `07-OBSERVABILITY.md`
-8. `08-SECURITY.md`
-9. `09-TESTING.md`
-10. `10-ROADMAP.md`
-11. `11-ADRS.md`
-12. `12-OPEN-SOURCE.md`
-13. `CODEX-START-HERE.md`
+Apache-2.0.

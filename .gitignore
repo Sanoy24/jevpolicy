@@ -6,3 +6,9 @@ coverage/
 .env.*
 !.env.example
 .DS_Store
+
+# Local pre-build design and implementation notes
+/0[1-9]-*.md
+/1[0-2]-*.md
+/CODEX-START-HERE.md
+/IMPLEMENTATION-CHECKLIST.md
