@@ -113,6 +113,18 @@ describe('compilePolicy', () => {
     expectIssue(policy, 'unknown_fact');
   });
 
+  it('rejects an undeclared signal', () => {
+    const policy = validPolicy();
+    policy['rules'] = [
+      {
+        id: 'missing-signal',
+        when: { signal: 'missing', op: 'eq', value: 'anything' },
+        decision: 'human_review',
+      },
+    ];
+    expectIssue(policy, 'unknown_signal');
+  });
+
   it('rejects signals in deterministic preconditions', () => {
     const policy = validPolicy();
     policy['preconditions'] = [
@@ -169,6 +181,54 @@ describe('compilePolicy', () => {
     firstRule['id'] = 'require-authentication';
     expectIssue(policy, 'duplicate_id');
   });
+
+  it('rejects duplicate decisions', () => {
+    const policy = validPolicy();
+    policy['decisions'] = ['billing', 'billing', 'human_review'];
+    expectIssue(policy, 'duplicate_decision');
+  });
+
+  it('rejects undeclared rule decisions', () => {
+    const policy = validPolicy();
+    const rules = policy['rules'] as Array<Record<string, unknown>>;
+    const firstRule = rules[0];
+    if (firstRule === undefined) throw new Error('missing test rule');
+    firstRule['decision'] = 'technical';
+    expectIssue(policy, 'unknown_decision');
+  });
+
+  it('rejects undeclared fallback decisions', () => {
+    const policy = validPolicy();
+    const fallback = policy['fallback'] as Record<string, unknown>;
+    fallback['no_match'] = 'technical';
+    expectIssue(policy, 'unknown_decision');
+  });
+
+  it('rejects ambiguous condition objects', () => {
+    const policy = validPolicy();
+    policy['rules'] = [
+      {
+        id: 'ambiguous',
+        when: {
+          signal: 'urgent',
+          op: 'gte',
+          value: 0.7,
+          all: [{ signal: 'urgent', op: 'gte', value: 0.7 }],
+        },
+        decision: 'human_review',
+      },
+    ];
+    expect(() => compilePolicy(policy)).toThrow(PolicyValidationError);
+  });
+
+  it('changes the policy fingerprint when policy contents change', () => {
+    const first = validPolicy();
+    const second = validPolicy();
+    second['description'] = 'Changed without incrementing the version';
+    expect(compilePolicy(first).fingerprint).not.toBe(
+      compilePolicy(second).fingerprint,
+    );
+  });
 });
 
 describe('fingerprintQuestion', () => {
@@ -206,6 +266,20 @@ describe('fingerprintQuestion', () => {
     };
     expect(fingerprintQuestion(first)).not.toBe(
       fingerprintQuestion({ ...first, criteria: ['high', 'low'] }),
+    );
+  });
+
+  it('changes when choice criteria descriptions change', () => {
+    const first = {
+      type: 'choice' as const,
+      instructions: 'Choose.',
+      criteria: { billing: 'Billing', account: 'Account' },
+    };
+    expect(fingerprintQuestion(first)).not.toBe(
+      fingerprintQuestion({
+        ...first,
+        criteria: { billing: 'Payment issues', account: 'Account' },
+      }),
     );
   });
 });
