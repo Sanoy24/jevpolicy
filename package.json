@@ -1,5 +1,5 @@
 {
-  "name": "@jevpolicy/core",
+  "name": "@sanoy24/jevpolicy",
   "version": "0.1.0",
   "description": "Policy-as-code for probabilistic software decisions.",
   "keywords": [

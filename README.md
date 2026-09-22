@@ -32,7 +32,7 @@ ordered policy rules -> decision + trace + optional record
 Requires Node.js 22.18 or later.
 
 ```bash
-npm install @jevpolicy/core
+npm install @sanoy24/jevpolicy
 ```
 
 The package includes the `jevpolicy` CLI:
@@ -165,7 +165,7 @@ import {
   JsonlRecorder,
   createJevPolicyRuntime,
   loadPolicyFile,
-} from '@jevpolicy/core';
+} from '@sanoy24/jevpolicy';
 
 const policy = await loadPolicyFile('./policy.yaml');
 const runtime = createJevPolicyRuntime({
