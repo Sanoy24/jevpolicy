@@ -39,7 +39,7 @@
     }
   },
   "bin": {
-    "jevpolicy": "./dist/cli/index.js"
+    "jevpolicy": "dist/cli/index.js"
   },
   "publishConfig": {
     "access": "public"

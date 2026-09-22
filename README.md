@@ -27,21 +27,21 @@ Jev typed questions -> normalized probabilistic signals
 ordered policy rules -> decision + trace + optional record
 ```
 
-## Run from source
+## Installation
 
 Requires Node.js 22.18 or later.
 
-Clone the repository, install its dependencies, and validate the included
-policy:
-
 ```bash
-git clone https://github.com/Sanoy24/jevpolicy.git
-cd jevpolicy
-npm install
-npm run cli -- validate examples/support-routing.policy.yaml
+npm install @jevpolicy/core
 ```
 
-Set `AI_GATEWAY_API_KEY` to run live evaluation through Vercel AI Gateway:
+The package includes the `jevpolicy` CLI:
+
+```bash
+npx jevpolicy validate ./policy.yaml
+```
+
+Live evaluation requires a Vercel AI Gateway key:
 
 ```bash
 export AI_GATEWAY_API_KEY="your-api-key"
@@ -51,6 +51,18 @@ In PowerShell:
 
 ```powershell
 $env:AI_GATEWAY_API_KEY = "your-api-key"
+```
+
+## Run the example from source
+
+Clone the repository, install its dependencies, and validate the included
+policy:
+
+```bash
+git clone https://github.com/Sanoy24/jevpolicy.git
+cd jevpolicy
+npm install
+npm run cli -- validate examples/support-routing.policy.yaml
 ```
 
 The included example asks Jev to classify a support request, then applies

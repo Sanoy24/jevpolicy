@@ -2,7 +2,7 @@
 
 All notable changes will be documented here.
 
-## Unreleased
+## 0.1.0 - 2026-09-22
 
 - Added the Node.js 22.18+, strict TypeScript, ESM, Vitest, ESLint, Prettier, and
   CI foundation.
