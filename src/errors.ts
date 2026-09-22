@@ -92,3 +92,10 @@ export class ReplayCompatibilityError extends Error {
     this.name = 'ReplayCompatibilityError';
   }
 }
+
+export class ShadowCompatibilityError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'ShadowCompatibilityError';
+  }
+}

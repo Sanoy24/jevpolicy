@@ -11,7 +11,7 @@ import type {
   ProviderUsage,
 } from '../providers/types.js';
 
-export type RuntimeMode = 'live' | 'replay';
+export type RuntimeMode = 'live' | 'shadow' | 'replay';
 
 export interface RuntimeClock {
   now(): Date;
@@ -23,6 +23,10 @@ export interface RuntimeEvaluationInput {
   readonly facts?: unknown;
   readonly abortSignal?: AbortSignal;
   readonly record?: boolean;
+}
+
+export interface ShadowEvaluationInput extends RuntimeEvaluationInput {
+  readonly shadowPolicy: CompiledPolicy;
 }
 
 export interface DecisionEnvelope {
@@ -59,4 +63,15 @@ export interface RuntimePolicyIdentity {
   readonly version: CompiledPolicy['version'];
   readonly schema: CompiledPolicy['schema'];
   readonly fingerprint: CompiledPolicy['fingerprint'];
+}
+
+export interface ShadowDecisionComparison {
+  readonly decisionChanged: boolean;
+  readonly matchChanged: boolean;
+}
+
+export interface ShadowEvaluationResult {
+  readonly active: DecisionEnvelope;
+  readonly shadow: DecisionEnvelope;
+  readonly comparison: ShadowDecisionComparison;
 }

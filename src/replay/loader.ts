@@ -98,7 +98,7 @@ const decisionRecordSchema = z
           .optional(),
       })
       .strict(),
-    mode: z.enum(['live', 'replay']),
+    mode: z.enum(['live', 'shadow', 'replay']),
   })
   .strict();
 
