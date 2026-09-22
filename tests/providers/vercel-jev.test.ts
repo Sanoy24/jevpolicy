@@ -168,6 +168,25 @@ describe('VercelJevProvider', () => {
     ).rejects.toBeInstanceOf(ProviderResponseError);
   });
 
+  it('enforces complete probability distributions from the SDK contract', async () => {
+    const malformed = sdkResult() as unknown as {
+      answers: Record<string, Record<string, unknown>>;
+    };
+    malformed.answers['category'] = {
+      type: 'choice',
+      choice: 'technical',
+      probabilities: { technical: 1 },
+    };
+    mocks.evaluate.mockResolvedValueOnce(malformed);
+
+    await expect(
+      new VercelJevProvider().evaluate({
+        state: 'test',
+        questions: policy().questions,
+      }),
+    ).rejects.toBeInstanceOf(ProviderResponseError);
+  });
+
   it('wraps AI SDK invalid-response errors without string matching', async () => {
     mocks.evaluate.mockRejectedValueOnce(
       new InvalidResponseDataError({ data: { invalid: true } }),

@@ -22,6 +22,7 @@ export interface RuntimeEvaluationInput {
   readonly state: EvaluationState;
   readonly facts?: unknown;
   readonly abortSignal?: AbortSignal;
+  readonly record?: boolean;
 }
 
 export interface DecisionEnvelope {

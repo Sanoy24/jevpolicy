@@ -4,6 +4,7 @@ export {
   ProviderError,
   ProviderResponseError,
   ProviderTimeoutError,
+  RecorderError,
   ReplayCompatibilityError,
   StateValidationError,
 } from './errors.js';
@@ -76,3 +77,15 @@ export type {
   RuntimeMode,
   VercelJevProviderConfig,
 } from './runtime/index.js';
+export {
+  JsonlRecorder,
+  createDecisionRecord,
+  fingerprintState,
+} from './recorders/index.js';
+export type {
+  CreateDecisionRecordInput,
+  DecisionRecord,
+  DecisionRecorder,
+  RecordedSignal,
+  StateRedactor,
+} from './recorders/index.js';

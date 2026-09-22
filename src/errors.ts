@@ -1,3 +1,5 @@
+import type { DecisionEnvelope } from './runtime/types.js';
+
 export interface PolicyIssue {
   readonly path: string;
   readonly message: string;
@@ -67,6 +69,20 @@ export class ProviderResponseError extends ProviderError {
   ) {
     super(message, options);
     this.name = 'ProviderResponseError';
+  }
+}
+
+export class RecorderError extends Error {
+  readonly envelope: DecisionEnvelope;
+
+  constructor(
+    message: string,
+    envelope: DecisionEnvelope,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'RecorderError';
+    this.envelope = envelope;
   }
 }
 

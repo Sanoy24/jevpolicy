@@ -11,16 +11,19 @@ import type {
   FallbackReason,
   SignalSet,
 } from '../core/types.js';
-import {
-  SignalValidationError,
-  validateSignals,
-} from '../core/validation.js';
+import { SignalValidationError, validateSignals } from '../core/validation.js';
 import {
   ProviderError,
   ProviderResponseError,
   ProviderTimeoutError,
+  RecorderError,
 } from '../errors.js';
 import type { CompiledPolicy } from '../policy/compiler.js';
+import { createDecisionRecord } from '../recorders/record.js';
+import type {
+  DecisionRecorder,
+  StateRedactor,
+} from '../recorders/types.js';
 import { validateEvaluationState } from '../providers/state.js';
 import type {
   DecisionProvider,
@@ -45,6 +48,8 @@ export interface DecisionRuntimeOptions {
   readonly providerOptions?: Omit<ProviderEvaluationOptions, 'abortSignal'>;
   readonly clock?: RuntimeClock;
   readonly idGenerator?: () => string;
+  readonly recorder?: DecisionRecorder;
+  readonly redactState?: StateRedactor;
 }
 
 interface EnvelopeContext {
@@ -79,6 +84,8 @@ export class DecisionRuntime {
   >;
   private readonly clock: RuntimeClock;
   private readonly idGenerator: () => string;
+  private readonly recorder: DecisionRecorder | undefined;
+  private readonly redactState: StateRedactor | undefined;
 
   constructor(options: DecisionRuntimeOptions) {
     this.policy = options.policy;
@@ -86,6 +93,8 @@ export class DecisionRuntime {
     this.providerOptions = options.providerOptions ?? {};
     this.clock = options.clock ?? defaultClock;
     this.idGenerator = options.idGenerator ?? randomUUID;
+    this.recorder = options.recorder;
+    this.redactState = options.redactState;
   }
 
   async evaluate(input: RuntimeEvaluationInput): Promise<DecisionEnvelope> {
@@ -105,21 +114,24 @@ export class DecisionRuntime {
       evaluatePreconditions(this.policy, facts),
     );
     if (preconditions.match !== null) {
-      return this.createEnvelope({
-        deterministic: {
-          decision: preconditions.match.decision,
-          matched: { preconditionId: preconditions.match.id },
-          fallback: { used: false },
-          trace: {
-            source: 'precondition',
-            evaluations: preconditions.evaluations,
+      return this.complete(
+        {
+          deterministic: {
+            decision: preconditions.match.decision,
+            matched: { preconditionId: preconditions.match.id },
+            fallback: { used: false },
+            trace: {
+              source: 'precondition',
+              evaluations: preconditions.evaluations,
+            },
           },
+          signals: Object.freeze({}),
+          invoked: false,
+          policyMs,
+          totalStartedAt,
         },
-        signals: Object.freeze({}),
-        invoked: false,
-        policyMs,
-        totalStartedAt,
-      });
+        input,
+      );
     }
 
     const state = validateEvaluationState(input.state);
@@ -147,14 +159,17 @@ export class DecisionRuntime {
           preconditions.evaluations,
         ),
       );
-      return this.createEnvelope({
-        deterministic,
-        signals: Object.freeze({}),
-        invoked: true,
-        policyMs,
-        providerMs,
-        totalStartedAt,
-      });
+      return this.complete(
+        {
+          deterministic,
+          signals: Object.freeze({}),
+          invoked: true,
+          policyMs,
+          providerMs,
+          totalStartedAt,
+        },
+        input,
+      );
     }
     const providerMs = Math.max(
       0,
@@ -174,20 +189,23 @@ export class DecisionRuntime {
           preconditions.evaluations,
         ),
       );
-      return this.createEnvelope({
-        deterministic,
-        signals: Object.freeze({}),
-        invoked: true,
-        policyMs,
-        providerMs,
-        totalStartedAt,
-        ...(providerResult.usage === undefined
-          ? {}
-          : { usage: providerResult.usage }),
-        ...(providerResult.gateway === undefined
-          ? {}
-          : { gateway: providerResult.gateway }),
-      });
+      return this.complete(
+        {
+          deterministic,
+          signals: Object.freeze({}),
+          invoked: true,
+          policyMs,
+          providerMs,
+          totalStartedAt,
+          ...(providerResult.usage === undefined
+            ? {}
+            : { usage: providerResult.usage }),
+          ...(providerResult.gateway === undefined
+            ? {}
+            : { gateway: providerResult.gateway }),
+        },
+        input,
+      );
     }
 
     const rules = measurePolicy(() =>
@@ -204,20 +222,48 @@ export class DecisionRuntime {
             trace: { source: 'policy_rule', evaluations },
           };
 
-    return this.createEnvelope({
-      deterministic,
-      signals,
-      invoked: true,
-      policyMs,
-      providerMs,
-      totalStartedAt,
-      ...(providerResult.usage === undefined
-        ? {}
-        : { usage: providerResult.usage }),
-      ...(providerResult.gateway === undefined
-        ? {}
-        : { gateway: providerResult.gateway }),
-    });
+    return this.complete(
+      {
+        deterministic,
+        signals,
+        invoked: true,
+        policyMs,
+        providerMs,
+        totalStartedAt,
+        ...(providerResult.usage === undefined
+          ? {}
+          : { usage: providerResult.usage }),
+        ...(providerResult.gateway === undefined
+          ? {}
+          : { gateway: providerResult.gateway }),
+      },
+      input,
+    );
+  }
+
+  private async complete(
+    context: EnvelopeContext,
+    input: RuntimeEvaluationInput,
+  ): Promise<DecisionEnvelope> {
+    const envelope = this.createEnvelope(context);
+    if (this.recorder === undefined || input.record === false) return envelope;
+
+    try {
+      const record = await createDecisionRecord({
+        policy: this.policy,
+        envelope,
+        state: input.state,
+        ...(this.redactState === undefined
+          ? {}
+          : { redactState: this.redactState }),
+      });
+      await this.recorder.record(record);
+    } catch (error) {
+      throw new RecorderError('Failed to record decision', envelope, {
+        cause: error,
+      });
+    }
+    return envelope;
   }
 
   private createEnvelope(context: EnvelopeContext): DecisionEnvelope {
@@ -243,9 +289,7 @@ export class DecisionRuntime {
         model: this.provider.model,
         invoked: context.invoked,
         ...(context.usage === undefined ? {} : { usage: context.usage }),
-        ...(context.gateway === undefined
-          ? {}
-          : { gateway: context.gateway }),
+        ...(context.gateway === undefined ? {} : { gateway: context.gateway }),
       },
       timing: {
         totalMs,

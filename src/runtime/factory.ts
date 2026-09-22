@@ -1,6 +1,6 @@
 import type { DecisionProvider } from '../providers/types.js';
 import {
-  type VERCEL_JEV_MODEL,
+  VERCEL_JEV_MODEL,
   VercelJevProvider,
 } from '../providers/vercel-jev/adapter.js';
 import {
@@ -39,7 +39,20 @@ export function createJevPolicyRuntime(
       ...(options.idGenerator === undefined
         ? {}
         : { idGenerator: options.idGenerator }),
+      ...(options.recorder === undefined ? {} : { recorder: options.recorder }),
+      ...(options.redactState === undefined
+        ? {}
+        : { redactState: options.redactState }),
     });
+  }
+
+  if (
+    options.provider.type !== 'vercel-jev' ||
+    options.provider.model !== VERCEL_JEV_MODEL
+  ) {
+    throw new RangeError(
+      `Only the '${VERCEL_JEV_MODEL}' Vercel JEV provider is supported`,
+    );
   }
 
   const { timeoutMs, maxRetries } = options.provider;
@@ -54,5 +67,9 @@ export function createJevPolicyRuntime(
     ...(options.idGenerator === undefined
       ? {}
       : { idGenerator: options.idGenerator }),
+    ...(options.recorder === undefined ? {} : { recorder: options.recorder }),
+    ...(options.redactState === undefined
+      ? {}
+      : { redactState: options.redactState }),
   });
 }

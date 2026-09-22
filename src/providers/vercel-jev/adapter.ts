@@ -29,6 +29,7 @@ export const VERCEL_JEV_MODEL = 'typesafe-ai/jev' as const;
 
 type EvaluationQuestions = Record<string, EvaluationQuestion>;
 type JevEvaluationResult = EvaluationResult<EvaluationQuestions>;
+const numericTolerance = 1e-6;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -40,6 +41,61 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 function hasOwn(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function responseError(message: string, cause?: unknown): ProviderResponseError {
+  return new ProviderResponseError(message, {
+    provider: VERCEL_JEV_ADAPTER,
+    model: VERCEL_JEV_MODEL,
+    ...(cause === undefined ? {} : { cause }),
+  });
+}
+
+function roundingError(value: unknown, label: string): number {
+  if (value === undefined) return 0;
+  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 15) {
+    throw responseError(
+      `Provider ${label} rounding must be an integer between 0 and 15`,
+    );
+  }
+  return 0.5 * 10 ** -(value as number);
+}
+
+function validateProviderDistribution(
+  value: unknown,
+  keys: readonly string[],
+  questionName: string,
+  allowedRoundingError: number,
+): asserts value is Record<string, number> {
+  if (
+    !isPlainRecord(value) ||
+    Object.keys(value).length !== keys.length ||
+    keys.some((key) => !hasOwn(value, key)) ||
+    Object.values(value).some(
+      (probability) =>
+        typeof probability !== 'number' ||
+        !Number.isFinite(probability) ||
+        probability < 0 ||
+        probability > 1,
+    )
+  ) {
+    throw responseError(
+      `Provider returned an incomplete probability distribution for question '${questionName}'`,
+    );
+  }
+  const distribution = value as Record<string, number>;
+  const sum = Object.values(distribution).reduce(
+    (total, probability) => total + probability,
+    0,
+  );
+  if (
+    Math.abs(sum - 1) >
+    numericTolerance + keys.length * allowedRoundingError
+  ) {
+    throw responseError(
+      `Provider probabilities for question '${questionName}' do not sum to 1`,
+    );
+  }
 }
 
 function mapQuestions(
@@ -98,6 +154,15 @@ function normalizeAnswers(
     );
   }
 
+  const probabilityRoundingError = roundingError(
+    result.rounding?.probabilityDecimals,
+    'probability',
+  );
+  const scoreRoundingError = roundingError(
+    result.rounding?.scoreDecimals,
+    'score',
+  );
+
   const signals: Record<string, unknown> = {};
   for (const [name, question] of Object.entries(questions)) {
     const answer = result.answers[name] as unknown;
@@ -115,6 +180,37 @@ function normalizeAnswers(
         };
         break;
       case 'choice':
+        if (answer['probabilities'] !== undefined) {
+          const probabilities = answer['probabilities'];
+          const keys = Object.keys(question.criteria);
+          validateProviderDistribution(
+            probabilities,
+            keys,
+            name,
+            probabilityRoundingError,
+          );
+          const selected = answer['choice'];
+          if (
+            typeof selected !== 'string' ||
+            !hasOwn(probabilities, selected)
+          ) {
+            throw responseError(
+              `Provider did not select a highest-probability option for question '${name}'`,
+            );
+          }
+          const selectedProbability = probabilities[selected];
+          if (
+            selectedProbability === undefined ||
+            Object.values(probabilities).some(
+              (probability) =>
+                probability > selectedProbability + numericTolerance,
+            )
+          ) {
+            throw responseError(
+              `Provider did not select a highest-probability option for question '${name}'`,
+            );
+          }
+        }
         signals[name] = {
           type: 'choice',
           value: answer['choice'],
@@ -124,6 +220,35 @@ function normalizeAnswers(
         };
         break;
       case 'score':
+        if (answer['probabilities'] !== undefined) {
+          const probabilities = answer['probabilities'];
+          const keys = question.criteria.map((_, index) => String(index));
+          validateProviderDistribution(
+            probabilities,
+            keys,
+            name,
+            probabilityRoundingError,
+          );
+          const weightedMean = Object.entries(probabilities).reduce(
+            (total, [index, probability]) =>
+              total + Number(index) * probability,
+            0,
+          );
+          const meanRoundingError = keys.reduce(
+            (total, index) =>
+              total + Number(index) * probabilityRoundingError,
+            0,
+          );
+          if (
+            typeof answer['score'] !== 'number' ||
+            Math.abs(weightedMean - answer['score']) >
+              numericTolerance + meanRoundingError + scoreRoundingError
+          ) {
+            throw responseError(
+              `Provider score for question '${name}' is inconsistent with its distribution`,
+            );
+          }
+        }
         signals[name] = {
           type: 'score',
           value: answer['score'],
@@ -149,6 +274,15 @@ function normalizeAnswers(
 function optionalUsage(result: JevEvaluationResult): ProviderUsage | undefined {
   const { inputTokens, outputTokens } = result.usage;
   if (inputTokens === undefined && outputTokens === undefined) return undefined;
+  if (
+    [inputTokens, outputTokens].some(
+      (value) =>
+        value !== undefined &&
+        (!Number.isInteger(value) || value < 0),
+    )
+  ) {
+    throw responseError('Provider returned invalid token usage');
+  }
   return {
     ...(inputTokens === undefined ? {} : { inputTokens }),
     ...(outputTokens === undefined ? {} : { outputTokens }),
