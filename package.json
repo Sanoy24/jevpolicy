@@ -2,6 +2,22 @@
   "name": "@jevpolicy/core",
   "version": "0.1.0",
   "description": "Policy-as-code for probabilistic software decisions.",
+  "keywords": [
+    "ai",
+    "decision-engine",
+    "jev",
+    "policy",
+    "policy-as-code",
+    "vercel-ai-sdk"
+  ],
+  "homepage": "https://github.com/Sanoy24/jevpolicy#readme",
+  "bugs": {
+    "url": "https://github.com/Sanoy24/jevpolicy/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sanoy24/jevpolicy.git"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "npm@11.19.0",
@@ -24,6 +40,9 @@
   },
   "bin": {
     "jevpolicy": "./dist/cli/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

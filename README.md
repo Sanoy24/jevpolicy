@@ -27,14 +27,16 @@ Jev typed questions -> normalized probabilistic signals
 ordered policy rules -> decision + trace + optional record
 ```
 
-## Quick start from source
+## Run from source
 
 Requires Node.js 22.18 or later.
 
-From a source checkout, install the project dependencies and validate the
-included policy:
+Clone the repository, install its dependencies, and validate the included
+policy:
 
 ```bash
+git clone https://github.com/Sanoy24/jevpolicy.git
+cd jevpolicy
 npm install
 npm run cli -- validate examples/support-routing.policy.yaml
 ```
