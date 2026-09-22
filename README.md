@@ -122,6 +122,17 @@ npm run cli -- evaluate examples/support-routing.policy.yaml \
   --json
 ```
 
+Evaluate a compatible candidate policy in shadow mode with the same provider
+request:
+
+```bash
+npm run cli -- evaluate examples/support-routing.policy.yaml \
+  --state examples/support-routing.state.json \
+  --shadow-policy ./support-routing.candidate.yaml \
+  --record decisions.jsonl \
+  --json
+```
+
 Abridged result:
 
 ```json

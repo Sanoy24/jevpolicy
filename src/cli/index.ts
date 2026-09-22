@@ -9,6 +9,7 @@ import {
   PolicyValidationError,
   RecorderError,
   ReplayCompatibilityError,
+  ShadowCompatibilityError,
   StateValidationError,
 } from '../errors.js';
 import { loadPolicyFile } from '../policy/loader.js';
@@ -22,7 +23,7 @@ import { createJevPolicyRuntime } from '../runtime/factory.js';
 function usage(): void {
   console.error(`Usage:
   jevpolicy validate <policy.yaml> [--json]
-  jevpolicy evaluate <policy.yaml> --state <state.json> [--facts <facts.json>] [--record <decisions.jsonl> | --no-record] [--json]
+  jevpolicy evaluate <policy.yaml> --state <state.json> [--facts <facts.json>] [--shadow-policy <candidate.yaml>] [--record <decisions.jsonl> | --no-record] [--json]
   jevpolicy replay <decisions.jsonl> --policy <policy.yaml> [--json]`);
 }
 
@@ -37,7 +38,13 @@ function parseArguments(args: readonly string[]): ParsedArguments | null {
   const values = new Map<string, string>();
   const flags = new Set<string>();
   const positional: string[] = [];
-  const valueOptions = new Set(['--state', '--facts', '--record', '--policy']);
+  const valueOptions = new Set([
+    '--state',
+    '--facts',
+    '--record',
+    '--policy',
+    '--shadow-policy',
+  ]);
   const flagOptions = new Set(['--json', '--no-record']);
 
   for (let index = 1; index < args.length; index += 1) {
@@ -125,11 +132,16 @@ async function evaluateCommand(options: {
   readonly policyPath: string;
   readonly statePath: string;
   readonly factsPath?: string;
+  readonly shadowPolicyPath?: string;
   readonly recordPath?: string;
   readonly noRecord: boolean;
   readonly json: boolean;
 }): Promise<number> {
   const policy = await loadPolicyFile(resolve(options.policyPath));
+  const shadowPolicy =
+    options.shadowPolicyPath === undefined
+      ? undefined
+      : await loadPolicyFile(resolve(options.shadowPolicyPath));
   const state = validateEvaluationState(await readJson(options.statePath));
   const facts =
     options.factsPath === undefined
@@ -143,10 +155,33 @@ async function evaluateCommand(options: {
     provider: { type: 'vercel-jev', model: 'typesafe-ai/jev' },
     ...(recorder === undefined ? {} : { recorder }),
   });
-  const result = await runtime.evaluate({ state, facts });
+  const result =
+    shadowPolicy === undefined
+      ? await runtime.evaluate({ state, facts })
+      : await runtime.evaluateWithShadow({ shadowPolicy, state, facts });
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
+  } else if ('active' in result) {
+    const activeMatch =
+      result.active.matched.preconditionId ??
+      result.active.matched.ruleId ??
+      '-';
+    const shadowMatch =
+      result.shadow.matched.preconditionId ??
+      result.shadow.matched.ruleId ??
+      '-';
+    console.log(`Active         ${result.active.decision}`);
+    console.log(`Shadow         ${result.shadow.decision}`);
+    console.log(
+      `Policy         ${policy.name}@${policy.version} -> ${shadowPolicy!.name}@${shadowPolicy!.version}`,
+    );
+    console.log(`Matched        ${activeMatch} -> ${shadowMatch}`);
+    console.log(
+      `Changed        ${result.comparison.decisionChanged ? 'yes' : 'no'}`,
+    );
+    console.log(`Provider       ${result.active.provider.model}`);
+    console.log(`Latency        ${result.active.timing.totalMs.toFixed(1)}ms`);
   } else {
     console.log(`Decision       ${result.decision}`);
     console.log(`Policy         ${policy.name}@${policy.version}`);
@@ -210,6 +245,7 @@ function reportError(error: unknown, json: boolean): number {
     error instanceof PolicyParseError ||
     error instanceof StateValidationError ||
     error instanceof ReplayCompatibilityError ||
+    error instanceof ShadowCompatibilityError ||
     error instanceof RecorderError;
   if (knownError) {
     console.error(
@@ -266,6 +302,9 @@ export async function runCli(args: readonly string[]): Promise<number> {
         ...(parsed.values.get('--facts') === undefined
           ? {}
           : { factsPath: parsed.values.get('--facts')! }),
+        ...(parsed.values.get('--shadow-policy') === undefined
+          ? {}
+          : { shadowPolicyPath: parsed.values.get('--shadow-policy')! }),
         ...(parsed.values.get('--record') === undefined
           ? {}
           : { recordPath: parsed.values.get('--record')! }),

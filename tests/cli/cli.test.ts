@@ -15,6 +15,8 @@ afterEach(async () => {
   for (const directory of temporaryDirectories.splice(0)) {
     await rm(join(directory, 'records.jsonl'), { force: true });
     await rm(join(directory, 'policy.yaml'), { force: true });
+    await rm(join(directory, 'shadow-policy.yaml'), { force: true });
+    await rm(join(directory, 'state.json'), { force: true });
     await rmdir(directory);
   }
 });
@@ -32,6 +34,13 @@ function policyDefinition(threshold: number): Record<string, unknown> {
         instructions: 'Is this urgent?',
       },
     },
+    preconditions: [
+      {
+        id: 'require-authentication',
+        when: { fact: 'authenticated', op: 'eq', value: false },
+        decision: 'review',
+      },
+    ],
     rules: [
       {
         id: 'approve-urgent',
@@ -49,6 +58,53 @@ function policyDefinition(threshold: number): Record<string, unknown> {
 }
 
 describe('CLI', () => {
+  it('evaluates a compatible shadow policy without invoking the provider', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
+    temporaryDirectories.push(directory);
+    const policyPath = join(directory, 'policy.yaml');
+    const shadowPolicyPath = join(directory, 'shadow-policy.yaml');
+    const statePath = join(directory, 'state.json');
+    await Promise.all([
+      writeFile(policyPath, JSON.stringify(policyDefinition(0.7)), 'utf8'),
+      writeFile(
+        shadowPolicyPath,
+        JSON.stringify(policyDefinition(0.9)),
+        'utf8',
+      ),
+      writeFile(statePath, JSON.stringify({ authenticated: false }), 'utf8'),
+    ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const exitCode = await runCli([
+      'evaluate',
+      policyPath,
+      '--state',
+      statePath,
+      '--shadow-policy',
+      shadowPolicyPath,
+      '--no-record',
+      '--json',
+    ]);
+
+    expect(exitCode).toBe(0);
+    const output: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(output).toMatchObject({
+      active: {
+        policy: { version: 1 },
+        mode: 'live',
+        decision: 'review',
+        provider: { invoked: false },
+      },
+      shadow: {
+        policy: { version: 2 },
+        mode: 'shadow',
+        decision: 'review',
+        provider: { invoked: false },
+      },
+      comparison: { decisionChanged: false, matchChanged: false },
+    });
+  });
+
   it('replays JSONL records offline and emits a JSON summary', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
     temporaryDirectories.push(directory);
