@@ -1,2 +1,5 @@
-// The isolated AI SDK adapter is introduced in Milestone 3.
-export {};
+export {
+  VERCEL_JEV_ADAPTER,
+  VERCEL_JEV_MODEL,
+  VercelJevProvider,
+} from './adapter.js';

@@ -211,12 +211,28 @@ export function validateSignals(
   policy: CompiledPolicy,
   input: unknown,
 ): SignalSet {
+  return validateSignalsForQuestions(policy.questions, input);
+}
+
+export function validateSignalsForQuestions(
+  questions: Readonly<Record<string, CompiledQuestion>>,
+  input: unknown,
+): SignalSet {
   if (!isPlainRecord(input)) {
     throw new SignalValidationError('Signals must be an object');
   }
 
+  const unknownNames = Object.keys(input).filter(
+    (name) => !hasOwn(questions, name),
+  );
+  if (unknownNames.length > 0) {
+    throw new SignalValidationError(
+      `Signals contain unknown names: ${unknownNames.join(', ')}`,
+    );
+  }
+
   const result: Record<string, DecisionSignal> = {};
-  for (const [name, question] of Object.entries(policy.questions)) {
+  for (const [name, question] of Object.entries(questions)) {
     if (!hasOwn(input, name)) {
       throw new SignalValidationError(
         `Required signal '${name}' is missing`,

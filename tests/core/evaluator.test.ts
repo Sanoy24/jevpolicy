@@ -289,6 +289,15 @@ describe('input validation', () => {
     ).toThrow(SignalValidationError);
   });
 
+  it('rejects undeclared signal names', () => {
+    expect(() =>
+      validateSignals(
+        compilePolicy(policyDefinition()),
+        signals({ extra: { type: 'boolean', probabilityTrue: 0.5 } }),
+      ),
+    ).toThrow(SignalValidationError);
+  });
+
   it('rejects provider-native or unknown signal fields', () => {
     expect(() =>
       validateSignals(

@@ -36,6 +36,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "4.0.87",
+    "@ai-sdk/provider": "4.0.17",
+    "ai": "7.0.107",
     "yaml": "2.9.1",
     "zod": "4.6.5"
   },

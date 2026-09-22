@@ -35,6 +35,41 @@ export class StateValidationError extends Error {
   }
 }
 
+export class ProviderError extends Error {
+  readonly provider: string;
+  readonly model: string;
+
+  constructor(
+    message: string,
+    options: ErrorOptions & { provider: string; model: string },
+  ) {
+    super(message, options);
+    this.name = 'ProviderError';
+    this.provider = options.provider;
+    this.model = options.model;
+  }
+}
+
+export class ProviderTimeoutError extends ProviderError {
+  constructor(
+    message: string,
+    options: ErrorOptions & { provider: string; model: string },
+  ) {
+    super(message, options);
+    this.name = 'ProviderTimeoutError';
+  }
+}
+
+export class ProviderResponseError extends ProviderError {
+  constructor(
+    message: string,
+    options: ErrorOptions & { provider: string; model: string },
+  ) {
+    super(message, options);
+    this.name = 'ProviderResponseError';
+  }
+}
+
 export class ReplayCompatibilityError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);

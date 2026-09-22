@@ -14,6 +14,7 @@ export {
   SignalValidationError,
   validateFacts,
   validateSignals,
+  validateSignalsForQuestions,
 } from './validation.js';
 export type {
   AllConditionTrace,
