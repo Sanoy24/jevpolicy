@@ -115,6 +115,6 @@ describe('decision records', () => {
         envelope: envelope(compiled),
         state: 'sensitive',
       }),
-    ).rejects.toThrow("requires a state redactor");
+    ).rejects.toThrow('requires a state redactor');
   });
 });

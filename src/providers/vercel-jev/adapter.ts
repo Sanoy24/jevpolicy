@@ -43,7 +43,10 @@ function hasOwn(record: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
-function responseError(message: string, cause?: unknown): ProviderResponseError {
+function responseError(
+  message: string,
+  cause?: unknown,
+): ProviderResponseError {
   return new ProviderResponseError(message, {
     provider: VERCEL_JEV_ADAPTER,
     model: VERCEL_JEV_MODEL,
@@ -53,7 +56,11 @@ function responseError(message: string, cause?: unknown): ProviderResponseError 
 
 function roundingError(value: unknown, label: string): number {
   if (value === undefined) return 0;
-  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 15) {
+  if (
+    !Number.isInteger(value) ||
+    (value as number) < 0 ||
+    (value as number) > 15
+  ) {
     throw responseError(
       `Provider ${label} rounding must be an integer between 0 and 15`,
     );
@@ -235,8 +242,7 @@ function normalizeAnswers(
             0,
           );
           const meanRoundingError = keys.reduce(
-            (total, index) =>
-              total + Number(index) * probabilityRoundingError,
+            (total, index) => total + Number(index) * probabilityRoundingError,
             0,
           );
           if (
@@ -276,9 +282,7 @@ function optionalUsage(result: JevEvaluationResult): ProviderUsage | undefined {
   if (inputTokens === undefined && outputTokens === undefined) return undefined;
   if (
     [inputTokens, outputTokens].some(
-      (value) =>
-        value !== undefined &&
-        (!Number.isInteger(value) || value < 0),
+      (value) => value !== undefined && (!Number.isInteger(value) || value < 0),
     )
   ) {
     throw responseError('Provider returned invalid token usage');

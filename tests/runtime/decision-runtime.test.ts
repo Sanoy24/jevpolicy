@@ -291,9 +291,9 @@ describe('DecisionRuntime', () => {
   });
 
   it('records after computing the decision without persisting state by default', async () => {
-    const record = vi.fn<
-      (decisionRecord: DecisionRecord) => Promise<void>
-    >(() => Promise.resolve());
+    const record = vi.fn<(decisionRecord: DecisionRecord) => Promise<void>>(
+      () => Promise.resolve(),
+    );
     const compiled = policy();
     const runtime = new DecisionRuntime({
       policy: compiled,
@@ -324,9 +324,9 @@ describe('DecisionRuntime', () => {
   });
 
   it('supports disabling an attached recorder per evaluation', async () => {
-    const record = vi.fn<
-      (decisionRecord: DecisionRecord) => Promise<void>
-    >(() => Promise.resolve());
+    const record = vi.fn<(decisionRecord: DecisionRecord) => Promise<void>>(
+      () => Promise.resolve(),
+    );
     const runtime = new DecisionRuntime({
       policy: policy(),
       provider: provider(() => Promise.resolve(successfulResult())),

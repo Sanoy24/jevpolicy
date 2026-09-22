@@ -20,10 +20,7 @@ import {
 } from '../errors.js';
 import type { CompiledPolicy } from '../policy/compiler.js';
 import { createDecisionRecord } from '../recorders/record.js';
-import type {
-  DecisionRecorder,
-  StateRedactor,
-} from '../recorders/types.js';
+import type { DecisionRecorder, StateRedactor } from '../recorders/types.js';
 import { validateEvaluationState } from '../providers/state.js';
 import type {
   DecisionProvider,

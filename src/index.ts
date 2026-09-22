@@ -89,3 +89,16 @@ export type {
   RecordedSignal,
   StateRedactor,
 } from './recorders/index.js';
+export {
+  loadDecisionRecords,
+  replayDecision,
+  replayRecords,
+  summarizeReplay,
+  validateReplayCompatibility,
+} from './replay/index.js';
+export type {
+  ReplayBatchResult,
+  ReplayDecisionResult,
+  ReplaySummary,
+  ReplayTransition,
+} from './replay/index.js';

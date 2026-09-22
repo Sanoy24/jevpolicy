@@ -1,0 +1,115 @@
+import { mkdtemp, rm, rmdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { runCli } from '../../src/cli/index.js';
+import { compilePolicy } from '../../src/policy/compiler.js';
+import type { DecisionRecord } from '../../src/recorders/types.js';
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  for (const directory of temporaryDirectories.splice(0)) {
+    await rm(join(directory, 'records.jsonl'), { force: true });
+    await rm(join(directory, 'policy.yaml'), { force: true });
+    await rmdir(directory);
+  }
+});
+
+function policyDefinition(threshold: number): Record<string, unknown> {
+  return {
+    schema: 'jevpolicy/v1',
+    name: 'cli-replay',
+    version: threshold === 0.7 ? 1 : 2,
+    decisions: ['approve', 'review'],
+    facts: { authenticated: { type: 'boolean', required: true } },
+    questions: {
+      urgent: {
+        type: 'boolean',
+        instructions: 'Is this urgent?',
+      },
+    },
+    rules: [
+      {
+        id: 'approve-urgent',
+        when: { signal: 'urgent', op: 'gte', value: threshold },
+        decision: 'approve',
+      },
+    ],
+    fallback: {
+      provider_error: 'review',
+      provider_timeout: 'review',
+      invalid_provider_response: 'review',
+      no_match: 'review',
+    },
+  };
+}
+
+describe('CLI', () => {
+  it('replays JSONL records offline and emits a JSON summary', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
+    temporaryDirectories.push(directory);
+    const policyPath = join(directory, 'policy.yaml');
+    const recordsPath = join(directory, 'records.jsonl');
+    const original = compilePolicy(policyDefinition(0.7));
+    const record: DecisionRecord = {
+      format: 'jevpolicy.record/v1',
+      decisionId: 'cli-decision',
+      timestamp: '2026-09-22T08:00:00.000Z',
+      policy: {
+        name: original.name,
+        version: original.version,
+        fingerprint: original.fingerprint,
+      },
+      facts: { authenticated: true },
+      signals: {
+        urgent: {
+          questionFingerprint: original.questions['urgent']!.fingerprint,
+          signal: { type: 'boolean', probabilityTrue: 0.8 },
+        },
+      },
+      originalDecision: 'approve',
+      matched: { ruleId: 'approve-urgent' },
+      provider: {
+        adapter: 'vercel-jev',
+        model: 'typesafe-ai/jev',
+        invoked: true,
+      },
+      mode: 'live',
+    };
+    await Promise.all([
+      writeFile(policyPath, JSON.stringify(policyDefinition(0.9)), 'utf8'),
+      writeFile(recordsPath, `${JSON.stringify(record)}\n`, 'utf8'),
+    ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const exitCode = await runCli([
+      'replay',
+      recordsPath,
+      '--policy',
+      policyPath,
+      '--json',
+    ]);
+
+    expect(exitCode).toBe(0);
+    const output: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(output).toMatchObject({
+      summary: {
+        records: 1,
+        changed: 1,
+        transitions: [{ from: 'approve', to: 'review', count: 1 }],
+      },
+    });
+  });
+
+  it('returns usage status for malformed command arguments', async () => {
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    await expect(runCli(['replay', 'records.jsonl'])).resolves.toBe(2);
+    expect(error).toHaveBeenCalledOnce();
+  });
+});

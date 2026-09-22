@@ -6,11 +6,7 @@ import type { CompiledPolicy } from '../policy/compiler.js';
 import { validateEvaluationState } from '../providers/state.js';
 import type { EvaluationState, JsonValue } from '../providers/types.js';
 import type { DecisionEnvelope } from '../runtime/types.js';
-import type {
-  DecisionRecord,
-  RecordedSignal,
-  StateRedactor,
-} from './types.js';
+import type { DecisionRecord, RecordedSignal, StateRedactor } from './types.js';
 
 function canonicalJson(value: JsonValue): string {
   if (value === null || typeof value !== 'object') {
@@ -74,7 +70,9 @@ export async function createDecisionRecord({
           "Policy recording mode 'redacted' requires a state redactor",
         );
       }
-      recordedState = validateEvaluationState(await redactState(validatedState));
+      recordedState = validateEvaluationState(
+        await redactState(validatedState),
+      );
     }
   }
 
