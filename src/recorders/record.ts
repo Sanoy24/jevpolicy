@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { validateFacts } from '../core/validation.js';
 import { StateValidationError } from '../errors.js';
 import type { CompiledPolicy } from '../policy/compiler.js';
 import { validateEvaluationState } from '../providers/state.js';
@@ -34,6 +35,7 @@ export interface CreateDecisionRecordInput {
   readonly policy: CompiledPolicy;
   readonly envelope: DecisionEnvelope;
   readonly state: EvaluationState;
+  readonly facts?: unknown;
   readonly redactState?: StateRedactor;
 }
 
@@ -41,8 +43,10 @@ export async function createDecisionRecord({
   policy,
   envelope,
   state,
+  facts = {},
   redactState,
 }: CreateDecisionRecordInput): Promise<DecisionRecord> {
+  const validatedFacts = validateFacts(policy, facts);
   const signals: Record<string, RecordedSignal> = {};
   for (const [name, signal] of Object.entries(envelope.signals)) {
     const question = policy.questions[name];
@@ -85,6 +89,7 @@ export async function createDecisionRecord({
     }),
     ...(recordedState === undefined ? {} : { state: recordedState }),
     ...(stateFingerprint === undefined ? {} : { stateFingerprint }),
+    facts: validatedFacts,
     signals: Object.freeze(signals),
     originalDecision: envelope.decision,
     matched: envelope.matched,

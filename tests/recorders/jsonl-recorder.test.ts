@@ -26,6 +26,7 @@ function record(decisionId: string): DecisionRecord {
       version: 1,
       fingerprint: 'a'.repeat(64),
     },
+    facts: {},
     signals: {},
     originalDecision: 'review',
     matched: {},

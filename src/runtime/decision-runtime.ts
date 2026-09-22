@@ -253,6 +253,7 @@ export class DecisionRuntime {
         policy: this.policy,
         envelope,
         state: input.state,
+        facts: input.facts ?? {},
         ...(this.redactState === undefined
           ? {}
           : { redactState: this.redactState }),

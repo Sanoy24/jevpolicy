@@ -1,4 +1,4 @@
-import type { DecisionSignal } from '../core/types.js';
+import type { DecisionSignal, FactSet } from '../core/types.js';
 import type { EvaluationState } from '../providers/types.js';
 import type { DecisionEnvelope, RuntimeMode } from '../runtime/types.js';
 
@@ -18,6 +18,7 @@ export interface DecisionRecord {
   };
   readonly state?: EvaluationState;
   readonly stateFingerprint?: string;
+  readonly facts: FactSet;
   readonly signals: Readonly<Record<string, RecordedSignal>>;
   readonly originalDecision: string;
   readonly matched: DecisionEnvelope['matched'];
