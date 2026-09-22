@@ -4,32 +4,137 @@
 
 JevPolicy is an open-source TypeScript decision runtime that turns probabilistic judgments from **Jev, accessed through Vercel AI Gateway**, into versioned, deterministic, replayable, observable application decisions.
 
-## Development status
+## What it does
 
-The v0.1 implementation is feature-complete and remains pre-release. It includes
-the strict policy compiler, Vercel JEV adapter, deterministic runtime, typed
-fallbacks, JSONL recording, and offline signal replay.
+JevPolicy separates probabilistic judgment from deterministic application
+policy. An application supplies state and facts, Jev answers typed questions
+with probabilities, and ordered YAML rules turn those signals into a decision.
 
-## Getting started
+This is useful for workflows such as support routing, moderation, approval
+gates, risk review, and escalation. JevPolicy returns the decision and its audit
+trace; the host application remains responsible for carrying out any action.
+
+```text
+state + facts
+     |
+     v
+deterministic preconditions
+     |
+     v
+Jev typed questions -> normalized probabilistic signals
+     |
+     v
+ordered policy rules -> decision + trace + optional record
+```
+
+## Quick start from source
 
 Requires Node.js 22.18 or later.
+
+From a source checkout, install the project dependencies and validate the
+included policy:
 
 ```bash
 npm install
 npm run cli -- validate examples/support-routing.policy.yaml
-npm run typecheck
-npm test
 ```
 
-Set `AI_GATEWAY_API_KEY` to run live evaluation through Vercel AI Gateway.
+Set `AI_GATEWAY_API_KEY` to run live evaluation through Vercel AI Gateway:
+
+```bash
+export AI_GATEWAY_API_KEY="your-api-key"
+```
+
+In PowerShell:
+
+```powershell
+$env:AI_GATEWAY_API_KEY = "your-api-key"
+```
+
+The included example asks Jev to classify a support request, then applies
+deterministic routing rules. Its essential policy is:
+
+```yaml
+schema: jevpolicy/v1
+name: support-routing
+version: 1
+
+decisions: [billing, technical, account, human_review]
+
+questions:
+  category:
+    type: choice
+    instructions: Which support category best matches this ticket?
+    criteria:
+      billing: Payment, refund, or charge problems
+      technical: Product or application problems
+      account: Login or account-management problems
+
+rules:
+  - id: billing-route
+    when:
+      signal: category
+      op: eq
+      value: billing
+    decision: billing
+
+fallback:
+  provider_error: human_review
+  provider_timeout: human_review
+  invalid_provider_response: human_review
+  no_match: human_review
+```
+
+See the complete
+[`support-routing.policy.yaml`](examples/support-routing.policy.yaml) for its
+fact declaration, precondition, additional questions, and remaining routes.
+
+The example state is ordinary JSON:
+
+```json
+{
+  "subject": "Refund missing",
+  "body": "I was charged twice and need help resolving it.",
+  "authenticated": true
+}
+```
+
+Evaluate it and record the decision:
 
 ```bash
 npm run cli -- evaluate examples/support-routing.policy.yaml \
   --state examples/support-routing.state.json \
-  --record decisions.jsonl
+  --record decisions.jsonl \
+  --json
+```
 
+Abridged result:
+
+```json
+{
+  "mode": "live",
+  "decision": "billing",
+  "matched": { "ruleId": "billing-route" },
+  "signals": {
+    "category": { "type": "choice", "value": "billing" }
+  },
+  "provider": {
+    "adapter": "vercel-jev",
+    "model": "typesafe-ai/jev",
+    "invoked": true
+  },
+  "fallback": { "used": false }
+}
+```
+
+Jev supplied the probabilistic `category` signal; the `billing-route` policy
+rule made the final decision. Replay reuses the recorded signals without another
+provider call:
+
+```bash
 npm run cli -- replay decisions.jsonl \
-  --policy examples/support-routing.policy.yaml
+  --policy examples/support-routing.policy.yaml \
+  --json
 ```
 
 The CLI derives declared facts from same-named top-level properties in the state
@@ -37,7 +142,9 @@ object. Use `--facts facts.json` to supply them separately. It records to
 `decisions.jsonl` by default; use `--no-record` to disable recording. `--json`
 is available for validate, evaluate, and replay.
 
-Programmatic runtime evaluation:
+## Library usage
+
+The same runtime can be embedded directly in a TypeScript application:
 
 ```ts
 import {
@@ -76,48 +183,17 @@ fallbacks; they never silently become an allow decision.
 
 Raw state recording defaults to `none`. Policies may opt into `full` state
 recording, or `redacted` recording when the programmatic runtime supplies a
-redaction hook. Records always contain declared deterministic facts and
-question-fingerprinted normalized signals so replay can reproduce policy logic
-without calling the provider. Do not place credentials or secrets in declared
-facts.
+redaction hook. Records contain declared deterministic facts. Successful
+provider evaluations also contain question-fingerprinted normalized signals so
+replay can reproduce policy logic without calling the provider. Records created
+by a terminating precondition or provider fallback may not contain the complete
+signal set and cannot be replayed against policies that require those signals.
+
+Do not place credentials or secrets in declared facts. Decision logs may contain
+sensitive facts, signals, or state, so keep them out of version control.
 
 If persistence fails, evaluation throws `RecorderError`; its `envelope` property
 contains the decision that was already computed.
-
-## Core architecture
-
-```text
-Application
-    |
-    v
-JevPolicy Runtime
-    |
-    +--> deterministic preconditions
-    |
-    +--> policy definition
-    |
-    +--> Vercel AI SDK `experimental_evaluate`
-              |
-              v
-        Vercel AI Gateway
-              |
-              v
-       `typesafe-ai/jev`
-    |
-    v
-typed probabilistic signals
-    |
-    v
-deterministic policy evaluator
-    |
-    v
-ALLOW / REVIEW / DENY / ROUTE / custom action
-    |
-    +--> decision trace
-    +--> recorder
-    +--> metrics
-    +--> replay
-```
 
 ## Responsibility boundary
 
@@ -141,8 +217,7 @@ ALLOW / REVIEW / DENY / ROUTE / custom action
 - decision envelopes,
 - audit traces,
 - record/replay,
-- signal replay with question compatibility fingerprints,
-- policy-level metrics.
+- signal replay with question compatibility fingerprints.
 
 ### Host application owns
 
@@ -155,19 +230,6 @@ ALLOW / REVIEW / DENY / ROUTE / custom action
 - business transactions.
 
 **JevPolicy never executes the business action itself.**
-
-## Technology baseline
-
-- Node.js 22.18+
-- TypeScript
-- ESM
-- AI SDK 7+
-- Vercel AI Gateway
-- model: `typesafe-ai/jev`
-- `experimental_evaluate` from `ai`
-- Zod
-- YAML
-- Vitest
 
 ## License
 

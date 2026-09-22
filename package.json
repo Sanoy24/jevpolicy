@@ -1,6 +1,6 @@
 {
   "name": "@jevpolicy/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Policy-as-code for probabilistic software decisions.",
   "license": "Apache-2.0",
   "type": "module",
