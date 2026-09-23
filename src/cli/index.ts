@@ -12,6 +12,7 @@ import {
   ShadowCompatibilityError,
   StateValidationError,
 } from '../errors.js';
+import { diffPolicies, type PolicyChange } from '../policy/diff.js';
 import { loadPolicyFile } from '../policy/loader.js';
 import { validateEvaluationState } from '../providers/state.js';
 import type { EvaluationState } from '../providers/types.js';
@@ -23,6 +24,7 @@ import { createJevPolicyRuntime } from '../runtime/factory.js';
 function usage(): void {
   console.error(`Usage:
   jevpolicy validate <policy.yaml> [--json]
+  jevpolicy diff <base-policy.yaml> <candidate-policy.yaml> [--json]
   jevpolicy evaluate <policy.yaml> --state <state.json> [--facts <facts.json>] [--shadow-policy <candidate.yaml>] [--record <decisions.jsonl> | --no-record] [--json]
   jevpolicy replay <decisions.jsonl> --policy <policy.yaml> [--json]`);
 }
@@ -124,6 +126,49 @@ async function validateCommand(path: string, json: boolean): Promise<number> {
   } else {
     console.log(`Valid policy: ${policy.name}@${policy.version}`);
     console.log(`Fingerprint: ${policy.fingerprint}`);
+  }
+  return 0;
+}
+
+function formatChangeValue(value: unknown): string {
+  return value === undefined ? '<absent>' : JSON.stringify(value);
+}
+
+function formatPolicyChange(change: PolicyChange): string {
+  switch (change.kind) {
+    case 'added':
+      return `+ ${change.path}: ${formatChangeValue(change.after)}`;
+    case 'removed':
+      return `- ${change.path}: ${formatChangeValue(change.before)}`;
+    case 'changed':
+      return `~ ${change.path}: ${formatChangeValue(change.before)} -> ${formatChangeValue(change.after)}`;
+    case 'moved':
+      return `> ${change.path}: index ${change.beforeIndex} -> ${change.afterIndex}`;
+  }
+}
+
+async function diffCommand(
+  basePath: string,
+  candidatePath: string,
+  json: boolean,
+): Promise<number> {
+  const [base, candidate] = await Promise.all([
+    loadPolicyFile(resolve(basePath)),
+    loadPolicyFile(resolve(candidatePath)),
+  ]);
+  const result = diffPolicies(base, candidate);
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(
+      `Policy         ${base.name}@${base.version} -> ${candidate.name}@${candidate.version}`,
+    );
+    console.log(
+      `Changes        ${result.summary.total} (+${result.summary.added} -${result.summary.removed} ~${result.summary.changed} >${result.summary.moved})`,
+    );
+    for (const change of result.changes) {
+      console.log(formatPolicyChange(change));
+    }
   }
   return 0;
 }
@@ -288,6 +333,18 @@ export async function runCli(args: readonly string[]): Promise<number> {
       !parsed.flags.has('--no-record')
     ) {
       return await validateCommand(parsed.positional[0]!, json);
+    }
+    if (
+      parsed.command === 'diff' &&
+      parsed.positional.length === 2 &&
+      parsed.values.size === 0 &&
+      !parsed.flags.has('--no-record')
+    ) {
+      return await diffCommand(
+        parsed.positional[0]!,
+        parsed.positional[1]!,
+        json,
+      );
     }
     if (
       parsed.command === 'evaluate' &&

@@ -1,0 +1,91 @@
+schema: jevpolicy/v1
+name: support-routing
+version: 2
+description: Candidate policy for routing support tickets
+
+decisions:
+  - billing
+  - technical
+  - account
+  - human_review
+
+facts:
+  authenticated:
+    type: boolean
+    required: true
+
+questions:
+  category:
+    type: choice
+    instructions: Which support category best matches this ticket?
+    criteria:
+      billing: Payment, refund, or charge problems
+      technical: Product or application problems
+      account: Login or account-management problems
+
+  urgent:
+    type: boolean
+    instructions: Does this support ticket require urgent attention?
+    criteria:
+      true: Requires immediate handling
+      false: Can follow the normal queue
+
+  complexity:
+    type: score
+    instructions: Rate how complex this ticket is to resolve.
+    criteria:
+      - trivial
+      - simple
+      - moderate
+      - complex
+      - specialist
+
+preconditions:
+  - id: unauthenticated
+    when:
+      fact: authenticated
+      op: eq
+      value: false
+    decision: human_review
+
+rules:
+  - id: billing-route
+    when:
+      signal: category
+      op: eq
+      value: billing
+    decision: billing
+
+  - id: complex-and-urgent
+    when:
+      all:
+        - signal: complexity
+          op: gte
+          value: 3
+        - signal: urgent
+          op: gte
+          value: 0.60
+    decision: human_review
+
+  - id: technical-route
+    when:
+      signal: category
+      op: eq
+      value: technical
+    decision: technical
+
+  - id: account-route
+    when:
+      signal: category
+      op: eq
+      value: account
+    decision: account
+
+fallback:
+  provider_error: human_review
+  provider_timeout: human_review
+  invalid_provider_response: human_review
+  no_match: human_review
+
+recording:
+  state: none

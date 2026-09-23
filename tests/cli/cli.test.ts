@@ -15,6 +15,7 @@ afterEach(async () => {
   for (const directory of temporaryDirectories.splice(0)) {
     await rm(join(directory, 'records.jsonl'), { force: true });
     await rm(join(directory, 'policy.yaml'), { force: true });
+    await rm(join(directory, 'candidate-policy.yaml'), { force: true });
     await rm(join(directory, 'shadow-policy.yaml'), { force: true });
     await rm(join(directory, 'state.json'), { force: true });
     await rmdir(directory);
@@ -58,6 +59,33 @@ function policyDefinition(threshold: number): Record<string, unknown> {
 }
 
 describe('CLI', () => {
+  it('diffs two policy files offline and emits structured JSON', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
+    temporaryDirectories.push(directory);
+    const basePath = join(directory, 'policy.yaml');
+    const candidatePath = join(directory, 'candidate-policy.yaml');
+    await Promise.all([
+      writeFile(basePath, JSON.stringify(policyDefinition(0.7)), 'utf8'),
+      writeFile(candidatePath, JSON.stringify(policyDefinition(0.9)), 'utf8'),
+    ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const exitCode = await runCli(['diff', basePath, candidatePath, '--json']);
+
+    expect(exitCode).toBe(0);
+    const output: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(output).toMatchObject({
+      base: { name: 'cli-replay', version: 1 },
+      candidate: { name: 'cli-replay', version: 2 },
+      changed: true,
+      summary: { total: 2, changed: 2 },
+      changes: [
+        { kind: 'changed', category: 'metadata', path: 'version' },
+        { kind: 'changed', category: 'rule', path: 'rules.approve-urgent' },
+      ],
+    });
+  });
+
   it('evaluates a compatible shadow policy without invoking the provider', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
     temporaryDirectories.push(directory);
