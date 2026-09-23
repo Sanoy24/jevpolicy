@@ -6,6 +6,7 @@ export {
   ProviderTimeoutError,
   RecorderError,
   ReplayCompatibilityError,
+  ShadowCompatibilityError,
   StateValidationError,
 } from './errors.js';
 export type { PolicyIssue } from './errors.js';
@@ -67,7 +68,11 @@ export type {
   ProviderEvaluationResult,
   ProviderUsage,
 } from './providers/index.js';
-export { DecisionRuntime, createJevPolicyRuntime } from './runtime/index.js';
+export {
+  DecisionRuntime,
+  createJevPolicyRuntime,
+  validateShadowCompatibility,
+} from './runtime/index.js';
 export type {
   CreateJevPolicyRuntimeOptions,
   DecisionEnvelope,
@@ -75,6 +80,9 @@ export type {
   RuntimeClock,
   RuntimeEvaluationInput,
   RuntimeMode,
+  ShadowDecisionComparison,
+  ShadowEvaluationInput,
+  ShadowEvaluationResult,
   VercelJevProviderConfig,
 } from './runtime/index.js';
 export {

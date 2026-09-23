@@ -5,6 +5,7 @@ import {
   ProviderResponseError,
   ProviderTimeoutError,
   RecorderError,
+  ShadowCompatibilityError,
   StateValidationError,
 } from '../../src/errors.js';
 import { compilePolicy } from '../../src/policy/compiler.js';
@@ -61,6 +62,60 @@ function policy(recordingState: 'none' | 'redacted' | 'full' = 'none') {
       no_match: 'no-match',
     },
     recording: { state: recordingState },
+  });
+}
+
+function shadowPolicy(options?: {
+  readonly threshold?: number;
+  readonly questionInstructions?: string;
+}) {
+  return compilePolicy({
+    schema: 'jevpolicy/v1',
+    name: 'runtime-contract',
+    version: 3,
+    decisions: [
+      'deny',
+      'review',
+      'provider-failed',
+      'timed-out',
+      'bad-response',
+      'no-match',
+    ],
+    facts: {
+      authenticated: { type: 'boolean', required: true },
+    },
+    questions: {
+      urgent: {
+        type: 'boolean',
+        instructions:
+          options?.questionInstructions ?? 'Is this request urgent?',
+      },
+    },
+    preconditions: [
+      {
+        id: 'require-authentication',
+        when: { fact: 'authenticated', op: 'eq', value: false },
+        decision: 'deny',
+      },
+    ],
+    rules: [
+      {
+        id: 'shadow-review-urgent',
+        when: {
+          signal: 'urgent',
+          op: 'gte',
+          value: options?.threshold ?? 0.9,
+        },
+        decision: 'review',
+      },
+    ],
+    fallback: {
+      provider_error: 'provider-failed',
+      provider_timeout: 'timed-out',
+      invalid_provider_response: 'bad-response',
+      no_match: 'no-match',
+    },
+    recording: { state: 'none' },
   });
 }
 
@@ -365,6 +420,123 @@ describe('DecisionRuntime', () => {
       });
       expect(error).toHaveProperty('cause', expect.any(Error));
     }
+  });
+
+  it('evaluates an active and compatible shadow policy with one provider call', async () => {
+    const evaluate = vi.fn<DecisionProvider['evaluate']>(() =>
+      Promise.resolve(successfulResult(0.8)),
+    );
+    const ids = ['active-decision', 'shadow-decision'];
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(evaluate),
+      idGenerator: () => ids.shift()!,
+    });
+
+    const result = await runtime.evaluateWithShadow({
+      shadowPolicy: shadowPolicy(),
+      state: { body: 'Help now' },
+      facts: { authenticated: true },
+    });
+
+    expect(evaluate).toHaveBeenCalledOnce();
+    expect(evaluate.mock.calls[0]?.[0].questions).toBe(
+      runtime.policy.questions,
+    );
+    expect(result).toMatchObject({
+      active: {
+        decisionId: 'active-decision',
+        mode: 'live',
+        decision: 'review',
+        matched: { ruleId: 'review-urgent' },
+        provider: { invoked: true },
+      },
+      shadow: {
+        decisionId: 'shadow-decision',
+        mode: 'shadow',
+        decision: 'no-match',
+        fallback: { used: true, reason: 'no_match' },
+        provider: { invoked: true },
+      },
+      comparison: { decisionChanged: true, matchChanged: true },
+    });
+    expect(result.active.signals).toEqual(result.shadow.signals);
+    expect(result.active.provider.gateway?.generationId).toBe(
+      result.shadow.provider.gateway?.generationId,
+    );
+  });
+
+  it('records active and shadow decisions as separate records', async () => {
+    const records: DecisionRecord[] = [];
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(() => Promise.resolve(successfulResult())),
+      recorder: {
+        record: (record) => {
+          records.push(record);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await runtime.evaluateWithShadow({
+      shadowPolicy: shadowPolicy(),
+      state: 'test',
+      facts: { authenticated: true },
+    });
+
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.mode)).toEqual(['live', 'shadow']);
+    expect(records.map((record) => record.policy.version)).toEqual([2, 3]);
+  });
+
+  it('does not invoke the provider when both policies terminate on a precondition', async () => {
+    const evaluate = vi.fn(() => Promise.resolve(successfulResult()));
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(evaluate),
+    });
+
+    const result = await runtime.evaluateWithShadow({
+      shadowPolicy: shadowPolicy(),
+      state: { invalid: 1n } as never,
+      facts: { authenticated: false },
+    });
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(result.active).toMatchObject({
+      mode: 'live',
+      decision: 'deny',
+      provider: { invoked: false },
+    });
+    expect(result.shadow).toMatchObject({
+      mode: 'shadow',
+      decision: 'deny',
+      provider: { invoked: false },
+    });
+    expect(result.comparison).toEqual({
+      decisionChanged: false,
+      matchChanged: false,
+    });
+  });
+
+  it('rejects changed shadow questions before invoking the provider', async () => {
+    const evaluate = vi.fn(() => Promise.resolve(successfulResult()));
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(evaluate),
+    });
+
+    await expect(
+      runtime.evaluateWithShadow({
+        shadowPolicy: shadowPolicy({
+          questionInstructions: 'Has this request become urgent?',
+        }),
+        state: 'test',
+        facts: { authenticated: true },
+      }),
+    ).rejects.toThrow(ShadowCompatibilityError);
+    expect(evaluate).not.toHaveBeenCalled();
   });
 });
 

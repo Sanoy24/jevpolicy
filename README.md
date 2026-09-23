@@ -122,6 +122,17 @@ npm run cli -- evaluate examples/support-routing.policy.yaml \
   --json
 ```
 
+Evaluate a compatible candidate policy in shadow mode with the same provider
+request:
+
+```bash
+npm run cli -- evaluate examples/support-routing.policy.yaml \
+  --state examples/support-routing.state.json \
+  --shadow-policy ./support-routing.candidate.yaml \
+  --record decisions.jsonl \
+  --json
+```
+
 Abridged result:
 
 ```json
@@ -192,6 +203,34 @@ console.log(result.decision, result.trace, result.fallback);
 Deterministic preconditions run before any provider call. Provider timeouts,
 invalid responses, and other provider failures map only to explicit policy
 fallbacks; they never silently become an allow decision.
+
+### Shadow evaluation
+
+Use a shadow policy to test rule and threshold changes against live traffic
+without letting the candidate decision control application behavior:
+
+```ts
+const shadowPolicy = await loadPolicyFile('./policy.candidate.yaml');
+const result = await runtime.evaluateWithShadow({
+  shadowPolicy,
+  state: {
+    subject: 'Refund missing',
+    body: 'I was charged twice',
+  },
+  facts: { authenticated: true },
+});
+
+applyDecision(result.active.decision);
+console.log(result.shadow.decision, result.comparison);
+```
+
+The active and shadow envelopes have `live` and `shadow` modes respectively.
+Both are recorded when a recorder is attached, but only `active` should drive
+host side effects. A compatible pair must have the same policy name, fact
+contract, question names, and question fingerprints. JevPolicy rejects an
+incompatible pair before invoking the provider. Compatible policies share one
+provider request, so shadow evaluation is intended for comparing policy logic
+over the same signal contract.
 
 ## Recording and replay
 
