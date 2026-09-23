@@ -65,6 +65,19 @@ npm install
 npm run cli -- validate examples/support-routing.policy.yaml
 ```
 
+Compare the released policy with a candidate entirely offline:
+
+```bash
+npm run cli -- diff \
+  examples/support-routing.policy.yaml \
+  examples/support-routing.candidate.policy.yaml \
+  --json
+```
+
+The diff reports stable paths for added, removed, changed, and reordered policy
+elements. Rules and preconditions are matched by ID because their order affects
+which decision wins.
+
 The included example asks Jev to classify a support request, then applies
 deterministic routing rules. Its essential policy is:
 
@@ -128,7 +141,7 @@ request:
 ```bash
 npm run cli -- evaluate examples/support-routing.policy.yaml \
   --state examples/support-routing.state.json \
-  --shadow-policy ./support-routing.candidate.yaml \
+  --shadow-policy examples/support-routing.candidate.policy.yaml \
   --record decisions.jsonl \
   --json
 ```
@@ -165,7 +178,7 @@ npm run cli -- replay decisions.jsonl \
 The CLI derives declared facts from same-named top-level properties in the state
 object. Use `--facts facts.json` to supply them separately. It records to
 `decisions.jsonl` by default; use `--no-record` to disable recording. `--json`
-is available for validate, evaluate, and replay.
+is available for validate, diff, evaluate, and replay.
 
 ## Library usage
 
@@ -203,6 +216,25 @@ console.log(result.decision, result.trace, result.fallback);
 Deterministic preconditions run before any provider call. Provider timeouts,
 invalid responses, and other provider failures map only to explicit policy
 fallbacks; they never silently become an allow decision.
+
+### Policy comparison
+
+`diffPolicies` exposes the same semantic comparison used by the CLI:
+
+```ts
+import { diffPolicies, loadPolicyFile } from '@sanoy24/jevpolicy';
+
+const base = await loadPolicyFile('./policy.yaml');
+const candidate = await loadPolicyFile('./policy.candidate.yaml');
+const diff = diffPolicies(base, candidate);
+
+console.log(diff.changed, diff.summary, diff.changes);
+```
+
+The comparison is deterministic and does not call a provider. Decision names
+are treated as a set; named facts and questions are compared by key; and
+preconditions and rules are matched by ID with order changes reported
+separately.
 
 ### Shadow evaluation
 

@@ -37,6 +37,7 @@ export type {
 } from './core/index.js';
 export {
   compilePolicy,
+  diffPolicies,
   fingerprintQuestion,
   loadPolicyFile,
   parsePolicyText,
@@ -48,7 +49,13 @@ export type {
   ConditionValue,
   FactDefinition,
   Operator,
+  PolicyChange,
+  PolicyChangeCategory,
+  PolicyChangeKind,
   PolicyDefinition,
+  PolicyDiff,
+  PolicyDiffIdentity,
+  PolicyDiffSummary,
   QuestionDefinition,
 } from './policy/index.js';
 export {
