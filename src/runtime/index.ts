@@ -10,6 +10,7 @@ export type {
 } from './factory.js';
 export type {
   DecisionEnvelope,
+  DecisionObserver,
   RuntimeClock,
   RuntimeEvaluationInput,
   RuntimeMode,

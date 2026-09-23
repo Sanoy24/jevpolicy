@@ -264,6 +264,34 @@ incompatible pair before invoking the provider. Compatible policies share one
 provider request, so shadow evaluation is intended for comparing policy logic
 over the same signal contract.
 
+### OpenTelemetry
+
+Applications with an OpenTelemetry SDK can attach the optional observer:
+
+```ts
+import { createJevPolicyRuntime } from '@sanoy24/jevpolicy';
+import { OpenTelemetryDecisionObserver } from '@sanoy24/jevpolicy/opentelemetry';
+
+const runtime = createJevPolicyRuntime({
+  policy,
+  provider: {
+    type: 'vercel-jev',
+    model: 'typesafe-ai/jev',
+  },
+  observer: new OpenTelemetryDecisionObserver(),
+});
+```
+
+Install `@opentelemetry/api` alongside JevPolicy when using this entry point.
+The application remains responsible for configuring its OpenTelemetry SDK and
+exporters; without a registered SDK, the API uses its standard no-op providers.
+
+The observer emits `jevpolicy.decision.evaluate` spans, evaluation and fallback
+counters, and decision/provider duration histograms. Attributes cover policy
+identity, mode, decision, provider, match, and fallback metadata. State, facts,
+signals, prompts, and provider responses are deliberately excluded. Observer
+failures are isolated and never change or reject a completed policy decision.
+
 ## Recording and replay
 
 Raw state recording defaults to `none`. Policies may opt into `full` state

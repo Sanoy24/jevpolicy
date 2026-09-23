@@ -17,7 +17,10 @@ import type { DecisionRecord } from '../../src/recorders/types.js';
 import { VercelJevProvider } from '../../src/providers/vercel-jev/adapter.js';
 import { DecisionRuntime } from '../../src/runtime/decision-runtime.js';
 import { createJevPolicyRuntime } from '../../src/runtime/factory.js';
-import type { RuntimeClock } from '../../src/runtime/types.js';
+import type {
+  DecisionObserver,
+  RuntimeClock,
+} from '../../src/runtime/types.js';
 
 function policy(recordingState: 'none' | 'redacted' | 'full' = 'none') {
   return compilePolicy({
@@ -422,6 +425,42 @@ describe('DecisionRuntime', () => {
     }
   });
 
+  it('notifies an observer with the completed decision envelope', async () => {
+    const observe = vi.fn<DecisionObserver['observe']>();
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(() => Promise.resolve(successfulResult())),
+      observer: { observe },
+    });
+
+    const result = await runtime.evaluate({
+      state: 'test',
+      facts: { authenticated: true },
+    });
+
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(result);
+  });
+
+  it('isolates observer failures from policy decisions', async () => {
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(() => Promise.resolve(successfulResult())),
+      observer: {
+        observe: () => {
+          throw new Error('telemetry backend unavailable');
+        },
+      },
+    });
+
+    await expect(
+      runtime.evaluate({
+        state: 'test',
+        facts: { authenticated: true },
+      }),
+    ).resolves.toMatchObject({ decision: 'review' });
+  });
+
   it('evaluates an active and compatible shadow policy with one provider call', async () => {
     const evaluate = vi.fn<DecisionProvider['evaluate']>(() =>
       Promise.resolve(successfulResult(0.8)),
@@ -488,6 +527,27 @@ describe('DecisionRuntime', () => {
     expect(records).toHaveLength(2);
     expect(records.map((record) => record.mode)).toEqual(['live', 'shadow']);
     expect(records.map((record) => record.policy.version)).toEqual([2, 3]);
+  });
+
+  it('observes active and shadow envelopes separately', async () => {
+    const observe = vi.fn<DecisionObserver['observe']>();
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(() => Promise.resolve(successfulResult())),
+      observer: { observe },
+    });
+
+    await runtime.evaluateWithShadow({
+      shadowPolicy: shadowPolicy(),
+      state: 'test',
+      facts: { authenticated: true },
+    });
+
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(observe.mock.calls.map(([envelope]) => envelope.mode)).toEqual([
+      'live',
+      'shadow',
+    ]);
   });
 
   it('does not invoke the provider when both policies terminate on a precondition', async () => {
@@ -560,6 +620,22 @@ describe('createJevPolicyRuntime', () => {
       },
     });
     expect(runtime.provider).toBeInstanceOf(VercelJevProvider);
+  });
+
+  it('forwards an observer through the public factory', async () => {
+    const observe = vi.fn<DecisionObserver['observe']>();
+    const runtime = createJevPolicyRuntime({
+      policy: policy(),
+      provider: provider(() => Promise.resolve(successfulResult())),
+      observer: { observe },
+    });
+
+    await runtime.evaluate({
+      state: 'test',
+      facts: { authenticated: true },
+    });
+
+    expect(observe).toHaveBeenCalledOnce();
   });
 
   it('rejects unsupported provider configuration at runtime', () => {
