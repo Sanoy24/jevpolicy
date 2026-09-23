@@ -32,6 +32,7 @@ import type {
 } from '../providers/types.js';
 import type {
   DecisionEnvelope,
+  DecisionObserver,
   RuntimeClock,
   RuntimeEvaluationInput,
   ShadowEvaluationInput,
@@ -51,6 +52,7 @@ export interface DecisionRuntimeOptions {
   readonly idGenerator?: () => string;
   readonly recorder?: DecisionRecorder;
   readonly redactState?: StateRedactor;
+  readonly observer?: DecisionObserver;
 }
 
 interface EnvelopeContext {
@@ -152,6 +154,7 @@ export class DecisionRuntime {
   private readonly idGenerator: () => string;
   private readonly recorder: DecisionRecorder | undefined;
   private readonly redactState: StateRedactor | undefined;
+  private readonly observer: DecisionObserver | undefined;
 
   constructor(options: DecisionRuntimeOptions) {
     this.policy = options.policy;
@@ -161,6 +164,7 @@ export class DecisionRuntime {
     this.idGenerator = options.idGenerator ?? randomUUID;
     this.recorder = options.recorder;
     this.redactState = options.redactState;
+    this.observer = options.observer;
   }
 
   async evaluate(input: RuntimeEvaluationInput): Promise<DecisionEnvelope> {
@@ -376,6 +380,9 @@ export class DecisionRuntime {
     input: RuntimeEvaluationInput,
   ): Promise<readonly DecisionEnvelope[]> {
     const envelopes = contexts.map((context) => this.createEnvelope(context));
+    for (const envelope of envelopes) {
+      this.notifyObserver(envelope);
+    }
     if (this.recorder === undefined || input.record === false) return envelopes;
 
     for (const [index, envelope] of envelopes.entries()) {
@@ -397,6 +404,16 @@ export class DecisionRuntime {
       }
     }
     return envelopes;
+  }
+
+  private notifyObserver(envelope: DecisionEnvelope): void {
+    if (this.observer === undefined) return;
+    try {
+      this.observer.observe(envelope);
+    } catch {
+      // Telemetry is best-effort and must never alter a policy decision.
+      return;
+    }
   }
 
   private createEnvelope(context: EnvelopeContext): DecisionEnvelope {

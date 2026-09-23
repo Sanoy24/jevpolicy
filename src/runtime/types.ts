@@ -58,6 +58,10 @@ export interface DecisionEnvelope {
   readonly trace: DecisionTrace;
 }
 
+export interface DecisionObserver {
+  observe(envelope: DecisionEnvelope): void;
+}
+
 export interface RuntimePolicyIdentity {
   readonly name: CompiledPolicy['name'];
   readonly version: CompiledPolicy['version'];

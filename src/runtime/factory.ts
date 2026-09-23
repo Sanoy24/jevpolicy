@@ -40,6 +40,7 @@ export function createJevPolicyRuntime(
         ? {}
         : { idGenerator: options.idGenerator }),
       ...(options.recorder === undefined ? {} : { recorder: options.recorder }),
+      ...(options.observer === undefined ? {} : { observer: options.observer }),
       ...(options.redactState === undefined
         ? {}
         : { redactState: options.redactState }),
@@ -68,6 +69,7 @@ export function createJevPolicyRuntime(
       ? {}
       : { idGenerator: options.idGenerator }),
     ...(options.recorder === undefined ? {} : { recorder: options.recorder }),
+    ...(options.observer === undefined ? {} : { observer: options.observer }),
     ...(options.redactState === undefined
       ? {}
       : { redactState: options.redactState }),

@@ -83,6 +83,7 @@ export {
 export type {
   CreateJevPolicyRuntimeOptions,
   DecisionEnvelope,
+  DecisionObserver,
   DecisionRuntimeOptions,
   RuntimeClock,
   RuntimeEvaluationInput,
