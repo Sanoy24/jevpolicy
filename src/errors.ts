@@ -93,6 +93,13 @@ export class ReplayCompatibilityError extends Error {
   }
 }
 
+export class OutcomeValidationError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'OutcomeValidationError';
+  }
+}
+
 export class ShadowCompatibilityError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);

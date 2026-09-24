@@ -308,6 +308,50 @@ sensitive facts, signals, or state, so keep them out of version control.
 If persistence fails, evaluation throws `RecorderError`; its `envelope` property
 contains the decision that was already computed.
 
+### Ground-truth outcomes
+
+Real-world outcomes often arrive after a decision has been recorded. Keep them
+in a separate append-only JSONL file so the original decision log remains
+immutable:
+
+```json
+{
+  "format": "jevpolicy.outcome/v1",
+  "decisionId": "47bb6a4b-ab09-49a1-bf01-75ced4c0e27a",
+  "label": "billing",
+  "observedAt": "2026-09-24T09:00:00.000Z"
+}
+```
+
+Load and join outcomes with their decision records:
+
+```ts
+import {
+  JsonlOutcomeRecorder,
+  joinDecisionOutcomes,
+  loadDecisionOutcomes,
+  loadDecisionRecords,
+} from '@sanoy24/jevpolicy';
+
+const outcomeRecorder = new JsonlOutcomeRecorder('./outcomes.jsonl');
+await outcomeRecorder.record({
+  format: 'jevpolicy.outcome/v1',
+  decisionId: '47bb6a4b-ab09-49a1-bf01-75ced4c0e27a',
+  label: 'billing',
+  observedAt: new Date().toISOString(),
+});
+
+const records = await loadDecisionRecords('./decisions.jsonl');
+const outcomes = await loadDecisionOutcomes('./outcomes.jsonl');
+const joined = joinDecisionOutcomes(records, outcomes);
+
+console.log(joined.labeled, joined.unlabeledDecisionIds, joined.summary);
+```
+
+Outcome labels are application-defined ground truth. Duplicate outcome or
+decision IDs and outcomes that reference an unknown decision are rejected so
+later analysis cannot silently join ambiguous data.
+
 ## Responsibility boundary
 
 ### Vercel AI Gateway owns
