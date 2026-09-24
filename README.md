@@ -352,6 +352,31 @@ Outcome labels are application-defined ground truth. Duplicate outcome or
 decision IDs and outcomes that reference an unknown decision are rejected so
 later analysis cannot silently join ambiguous data.
 
+### Calibration reports
+
+Compare recorded decisions with their observed labels entirely offline:
+
+```bash
+npx jevpolicy calibrate ./decisions.jsonl \
+  --outcomes ./outcomes.jsonl \
+  --json
+```
+
+The same report is available programmatically:
+
+```ts
+import { createCalibrationReport } from '@sanoy24/jevpolicy';
+
+const report = createCalibrationReport(records, outcomes);
+console.log(report.summary, report.labels, report.transitions);
+```
+
+The report contains label coverage, overall decision accuracy, per-label
+precision and recall, and predicted-to-observed transition counts. Undefined
+ratios are returned as `null`, never `NaN`. These metrics measure agreement
+between policy decisions and application-supplied labels; they do not claim to
+measure provider probability calibration.
+
 ## Responsibility boundary
 
 ### Vercel AI Gateway owns

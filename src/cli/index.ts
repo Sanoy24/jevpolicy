@@ -4,7 +4,9 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { createCalibrationReport } from '../analysis/calibration.js';
 import {
+  OutcomeValidationError,
   PolicyParseError,
   PolicyValidationError,
   RecorderError,
@@ -12,6 +14,7 @@ import {
   ShadowCompatibilityError,
   StateValidationError,
 } from '../errors.js';
+import { loadDecisionOutcomes } from '../outcomes/loader.js';
 import { diffPolicies, type PolicyChange } from '../policy/diff.js';
 import { loadPolicyFile } from '../policy/loader.js';
 import { validateEvaluationState } from '../providers/state.js';
@@ -26,7 +29,8 @@ function usage(): void {
   jevpolicy validate <policy.yaml> [--json]
   jevpolicy diff <base-policy.yaml> <candidate-policy.yaml> [--json]
   jevpolicy evaluate <policy.yaml> --state <state.json> [--facts <facts.json>] [--shadow-policy <candidate.yaml>] [--record <decisions.jsonl> | --no-record] [--json]
-  jevpolicy replay <decisions.jsonl> --policy <policy.yaml> [--json]`);
+  jevpolicy replay <decisions.jsonl> --policy <policy.yaml> [--json]
+  jevpolicy calibrate <decisions.jsonl> --outcomes <outcomes.jsonl> [--json]`);
 }
 
 interface ParsedArguments {
@@ -46,6 +50,7 @@ function parseArguments(args: readonly string[]): ParsedArguments | null {
     '--record',
     '--policy',
     '--shadow-policy',
+    '--outcomes',
   ]);
   const flagOptions = new Set(['--json', '--no-record']);
 
@@ -268,6 +273,37 @@ async function replayCommand(options: {
   return 0;
 }
 
+function formatPercentage(value: number | null): string {
+  return value === null ? 'n/a' : `${(value * 100).toFixed(1)}%`;
+}
+
+async function calibrateCommand(options: {
+  readonly recordsPath: string;
+  readonly outcomesPath: string;
+  readonly json: boolean;
+}): Promise<number> {
+  const [records, outcomes] = await Promise.all([
+    loadDecisionRecords(resolve(options.recordsPath)),
+    loadDecisionOutcomes(resolve(options.outcomesPath)),
+  ]);
+  const result = createCalibrationReport(records, outcomes);
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`Records        ${result.summary.records}`);
+    console.log(`Labeled        ${result.summary.labeled}`);
+    console.log(`Unlabeled      ${result.summary.unlabeled}`);
+    console.log(`Coverage       ${formatPercentage(result.summary.coverage)}`);
+    console.log(`Accuracy       ${formatPercentage(result.summary.accuracy)}`);
+    for (const transition of result.transitions) {
+      console.log(
+        `${transition.predicted} -> ${transition.observed}  ${transition.count}`,
+      );
+    }
+  }
+  return 0;
+}
+
 function reportError(error: unknown, json: boolean): number {
   if (error instanceof PolicyValidationError) {
     console.error(
@@ -287,6 +323,7 @@ function reportError(error: unknown, json: boolean): number {
     return 1;
   }
   const knownError =
+    error instanceof OutcomeValidationError ||
     error instanceof PolicyParseError ||
     error instanceof StateValidationError ||
     error instanceof ReplayCompatibilityError ||
@@ -351,6 +388,7 @@ export async function runCli(args: readonly string[]): Promise<number> {
       parsed.positional.length === 1 &&
       parsed.values.has('--state') &&
       !parsed.values.has('--policy') &&
+      !parsed.values.has('--outcomes') &&
       !(parsed.flags.has('--no-record') && parsed.values.has('--record'))
     ) {
       return await evaluateCommand({
@@ -379,6 +417,19 @@ export async function runCli(args: readonly string[]): Promise<number> {
       return await replayCommand({
         recordsPath: parsed.positional[0]!,
         policyPath: parsed.values.get('--policy')!,
+        json,
+      });
+    }
+    if (
+      parsed.command === 'calibrate' &&
+      parsed.positional.length === 1 &&
+      parsed.values.size === 1 &&
+      parsed.values.has('--outcomes') &&
+      !parsed.flags.has('--no-record')
+    ) {
+      return await calibrateCommand({
+        recordsPath: parsed.positional[0]!,
+        outcomesPath: parsed.values.get('--outcomes')!,
         json,
       });
     }
