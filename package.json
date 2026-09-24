@@ -1,6 +1,6 @@
 {
   "name": "@sanoy24/jevpolicy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Policy-as-code for probabilistic software decisions.",
   "keywords": [
     "ai",
