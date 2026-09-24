@@ -1,6 +1,7 @@
 export {
   PolicyParseError,
   PolicyValidationError,
+  OutcomeValidationError,
   ProviderError,
   ProviderResponseError,
   ProviderTimeoutError,
@@ -118,3 +119,15 @@ export type {
   ReplaySummary,
   ReplayTransition,
 } from './replay/index.js';
+export {
+  JsonlOutcomeRecorder,
+  joinDecisionOutcomes,
+  loadDecisionOutcomes,
+} from './outcomes/index.js';
+export type {
+  DecisionOutcome,
+  DecisionOutcomeRecorder,
+  LabeledDecisionRecord,
+  OutcomeJoinResult,
+  OutcomeJoinSummary,
+} from './outcomes/index.js';
