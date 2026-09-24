@@ -252,6 +252,82 @@ describe('CLI', () => {
     });
   });
 
+  it('analyzes confidence bands with custom boundaries', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
+    temporaryDirectories.push(directory);
+    const recordsPath = join(directory, 'records.jsonl');
+    const outcomesPath = join(directory, 'outcomes.jsonl');
+    const record: DecisionRecord = {
+      format: 'jevpolicy.record/v1',
+      decisionId: 'cli-confidence',
+      timestamp: '2026-09-24T08:00:00.000Z',
+      policy: {
+        name: 'cli-confidence',
+        version: 1,
+        fingerprint: 'a'.repeat(64),
+      },
+      facts: {},
+      signals: {
+        urgent: {
+          questionFingerprint: 'b'.repeat(64),
+          signal: { type: 'boolean', probabilityTrue: 0.8 },
+        },
+      },
+      originalDecision: 'approve',
+      matched: {},
+      provider: {
+        adapter: 'vercel-jev',
+        model: 'typesafe-ai/jev',
+        invoked: true,
+      },
+      mode: 'live',
+    };
+    const outcome: DecisionOutcome = {
+      format: 'jevpolicy.outcome/v1',
+      decisionId: record.decisionId,
+      label: 'approve',
+      observedAt: '2026-09-24T09:00:00.000Z',
+    };
+    await Promise.all([
+      writeFile(recordsPath, `${JSON.stringify(record)}\n`, 'utf8'),
+      writeFile(outcomesPath, `${JSON.stringify(outcome)}\n`, 'utf8'),
+    ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const exitCode = await runCli([
+      'confidence',
+      recordsPath,
+      '--outcomes',
+      outcomesPath,
+      '--boundaries',
+      '0,0.5,1',
+      '--json',
+    ]);
+
+    expect(exitCode).toBe(0);
+    const output: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(output).toMatchObject({
+      boundaries: [0, 0.5, 1],
+      summary: {
+        records: 1,
+        labeled: 1,
+        groups: 1,
+        observations: 1,
+      },
+      groups: [
+        {
+          question: 'urgent',
+          signalType: 'boolean',
+          measure: 'probability_true',
+          bands: [
+            { observations: 0 },
+            { observations: 1, decisionAccuracy: 1, averageValue: 0.8 },
+          ],
+        },
+      ],
+    });
+  });
+
   it('returns usage status for malformed command arguments', async () => {
     const error = vi
       .spyOn(console, 'error')

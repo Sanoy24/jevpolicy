@@ -377,6 +377,36 @@ ratios are returned as `null`, never `NaN`. These metrics measure agreement
 between policy decisions and application-supplied labels; they do not claim to
 measure provider probability calibration.
 
+### Confidence-band analysis
+
+Inspect how downstream decision accuracy changes across recorded probability
+and confidence bands:
+
+```bash
+npx jevpolicy confidence ./decisions.jsonl \
+  --outcomes ./outcomes.jsonl \
+  --boundaries 0,0.5,0.8,1 \
+  --json
+```
+
+Or create the report programmatically:
+
+```ts
+import { createConfidenceBandReport } from '@sanoy24/jevpolicy';
+
+const report = createConfidenceBandReport(records, outcomes, {
+  boundaries: [0, 0.5, 0.8, 1],
+});
+```
+
+The default boundaries are `0,0.2,0.4,0.6,0.8,1`. Reports remain separated by
+question fingerprint, signal type, and measure: Boolean probability true,
+Choice selected probability, Score peak probability, and optional Choice or
+Score confidence. Values outside the normalized range are counted explicitly.
+Bands measure the accuracy of the resulting policy decision against its outcome
+label; they do not treat a decision label as ground truth for an individual Jev
+question.
+
 ## Responsibility boundary
 
 ### Vercel AI Gateway owns

@@ -131,10 +131,20 @@ export type {
   OutcomeJoinResult,
   OutcomeJoinSummary,
 } from './outcomes/index.js';
-export { createCalibrationReport } from './analysis/index.js';
+export {
+  DEFAULT_CONFIDENCE_BAND_BOUNDARIES,
+  createCalibrationReport,
+  createConfidenceBandReport,
+} from './analysis/index.js';
 export type {
   CalibrationLabelMetrics,
   CalibrationReport,
   CalibrationSummary,
   CalibrationTransition,
+  ConfidenceBand,
+  ConfidenceBandGroup,
+  ConfidenceBandMeasure,
+  ConfidenceBandOptions,
+  ConfidenceBandReport,
+  ConfidenceBandSummary,
 } from './analysis/index.js';
