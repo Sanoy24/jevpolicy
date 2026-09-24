@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runCli } from '../../src/cli/index.js';
+import type { DecisionOutcome } from '../../src/outcomes/types.js';
 import { compilePolicy } from '../../src/policy/compiler.js';
 import type { DecisionRecord } from '../../src/recorders/types.js';
 
@@ -14,6 +15,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   for (const directory of temporaryDirectories.splice(0)) {
     await rm(join(directory, 'records.jsonl'), { force: true });
+    await rm(join(directory, 'outcomes.jsonl'), { force: true });
     await rm(join(directory, 'policy.yaml'), { force: true });
     await rm(join(directory, 'candidate-policy.yaml'), { force: true });
     await rm(join(directory, 'shadow-policy.yaml'), { force: true });
@@ -186,6 +188,67 @@ describe('CLI', () => {
         changed: 1,
         transitions: [{ from: 'approve', to: 'review', count: 1 }],
       },
+    });
+  });
+
+  it('calibrates recorded decisions against ground-truth outcomes', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
+    temporaryDirectories.push(directory);
+    const recordsPath = join(directory, 'records.jsonl');
+    const outcomesPath = join(directory, 'outcomes.jsonl');
+    const original = compilePolicy(policyDefinition(0.7));
+    const record: DecisionRecord = {
+      format: 'jevpolicy.record/v1',
+      decisionId: 'cli-calibration',
+      timestamp: '2026-09-24T08:00:00.000Z',
+      policy: {
+        name: original.name,
+        version: original.version,
+        fingerprint: original.fingerprint,
+      },
+      facts: { authenticated: true },
+      signals: {},
+      originalDecision: 'approve',
+      matched: { ruleId: 'approve-urgent' },
+      provider: {
+        adapter: 'vercel-jev',
+        model: 'typesafe-ai/jev',
+        invoked: true,
+      },
+      mode: 'live',
+    };
+    const outcome: DecisionOutcome = {
+      format: 'jevpolicy.outcome/v1',
+      decisionId: record.decisionId,
+      label: 'review',
+      observedAt: '2026-09-24T09:00:00.000Z',
+    };
+    await Promise.all([
+      writeFile(recordsPath, `${JSON.stringify(record)}\n`, 'utf8'),
+      writeFile(outcomesPath, `${JSON.stringify(outcome)}\n`, 'utf8'),
+    ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const exitCode = await runCli([
+      'calibrate',
+      recordsPath,
+      '--outcomes',
+      outcomesPath,
+      '--json',
+    ]);
+
+    expect(exitCode).toBe(0);
+    const output: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(output).toMatchObject({
+      summary: {
+        records: 1,
+        labeled: 1,
+        coverage: 1,
+        correct: 0,
+        incorrect: 1,
+        accuracy: 0,
+      },
+      transitions: [{ predicted: 'approve', observed: 'review', count: 1 }],
     });
   });
 

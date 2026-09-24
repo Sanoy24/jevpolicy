@@ -131,3 +131,10 @@ export type {
   OutcomeJoinResult,
   OutcomeJoinSummary,
 } from './outcomes/index.js';
+export { createCalibrationReport } from './analysis/index.js';
+export type {
+  CalibrationLabelMetrics,
+  CalibrationReport,
+  CalibrationSummary,
+  CalibrationTransition,
+} from './analysis/index.js';
