@@ -1,7 +1,7 @@
 import type { DecisionSignal } from '../core/types.js';
-import { joinDecisionOutcomes } from '../outcomes/join.js';
 import type { DecisionOutcome } from '../outcomes/types.js';
 import type { DecisionRecord, RecordedSignal } from '../recorders/types.js';
+import { selectLabeledRecords } from './selection.js';
 import type {
   ConfidenceBand,
   ConfidenceBandGroup,
@@ -188,12 +188,12 @@ export function createConfidenceBandReport(
   const boundaries = validateBoundaries(
     options.boundaries ?? DEFAULT_CONFIDENCE_BAND_BOUNDARIES,
   );
-  const joined = joinDecisionOutcomes(records, outcomes);
+  const selected = selectLabeledRecords(records, outcomes, options);
   const groups = new Map<string, MutableGroup>();
   let observations = 0;
   let outOfRange = 0;
 
-  for (const { record, outcome } of joined.labeled) {
+  for (const { record, outcome } of selected.labeled) {
     const correct = record.originalDecision === outcome.label;
     for (const [question, recorded] of Object.entries(record.signals)) {
       for (const measurement of measures(recorded.signal)) {
@@ -237,12 +237,14 @@ export function createConfidenceBandReport(
 
   const finalizedGroups = finalizeGroups(groups, boundaries);
   return Object.freeze({
+    selection: selected.selection,
+    policies: selected.policies,
     boundaries,
     summary: Object.freeze({
-      records: joined.summary.records,
-      labeled: joined.summary.labeled,
-      unlabeled: joined.summary.unlabeled,
-      coverage: ratio(joined.summary.labeled, joined.summary.records),
+      records: selected.records,
+      labeled: selected.labeled.length,
+      unlabeled: selected.unlabeled,
+      coverage: ratio(selected.labeled.length, selected.records),
       groups: finalizedGroups.length,
       observations,
       outOfRange,

@@ -1,6 +1,7 @@
 import type { CompiledPolicy } from '../policy/compiler.js';
 import type { Condition } from '../policy/schema.js';
 import { evaluateOperator } from './operators.js';
+import { ownValue } from './records.js';
 import type {
   ConditionTrace,
   DecisionSignal,
@@ -75,7 +76,7 @@ function evaluateCondition(
   }
 
   if ('fact' in condition) {
-    const observed = context.facts[condition.fact];
+    const observed = ownValue(context.facts, condition.fact);
     const missing = observed === undefined;
     return {
       kind: 'fact',
@@ -89,7 +90,7 @@ function evaluateCondition(
     };
   }
 
-  const signal = context.signals[condition.signal];
+  const signal = ownValue(context.signals, condition.signal);
   if (signal === undefined) {
     throw new Error(`Validated signal '${condition.signal}' is unavailable`);
   }

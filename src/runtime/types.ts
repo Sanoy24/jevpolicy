@@ -39,6 +39,8 @@ export interface DecisionEnvelope {
     readonly fingerprint: string;
   };
   readonly mode: RuntimeMode;
+  /** On a shadow envelope, the ID of the live decision it was evaluated beside. */
+  readonly activeDecisionId?: string;
   readonly decision: string;
   readonly matched: DecisionMatch;
   readonly signals: SignalSet;

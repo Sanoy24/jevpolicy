@@ -24,6 +24,7 @@ export interface DecisionRecord {
   readonly matched: DecisionEnvelope['matched'];
   readonly provider: DecisionEnvelope['provider'];
   readonly mode: RuntimeMode;
+  readonly activeDecisionId?: string;
 }
 
 export interface DecisionRecorder {

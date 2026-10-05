@@ -73,16 +73,26 @@ export class ProviderResponseError extends ProviderError {
 }
 
 export class RecorderError extends Error {
+  /** The decision that drives host behavior; always the live envelope. */
   readonly envelope: DecisionEnvelope;
+  /** The shadow envelope when the failure occurred during shadow evaluation. */
+  readonly shadow: DecisionEnvelope | undefined;
+  /** The mode of the record whose persistence failed. */
+  readonly failedMode: DecisionEnvelope['mode'];
 
   constructor(
     message: string,
     envelope: DecisionEnvelope,
-    options?: ErrorOptions,
+    options?: ErrorOptions & {
+      shadow?: DecisionEnvelope;
+      failedMode?: DecisionEnvelope['mode'];
+    },
   ) {
     super(message, options);
     this.name = 'RecorderError';
     this.envelope = envelope;
+    this.shadow = options?.shadow;
+    this.failedMode = options?.failedMode ?? envelope.mode;
   }
 }
 

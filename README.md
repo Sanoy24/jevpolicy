@@ -215,7 +215,21 @@ console.log(result.decision, result.trace, result.fallback);
 
 Deterministic preconditions run before any provider call. Provider timeouts,
 invalid responses, and other provider failures map only to explicit policy
-fallbacks; they never silently become an allow decision.
+fallbacks; they never silently become an allow decision. Cancelling through
+`abortSignal` is different: an aborted evaluation rejects with the signal's
+reason and records nothing, because no decision was made.
+
+Custom providers can receive `providerOptions` (such as `timeoutMs` and
+`maxRetries`) through `createJevPolicyRuntime`.
+
+#### Condition semantics
+
+- A condition on an optional fact that is absent evaluates to `false`, so
+  wrapping it in `not` evaluates to `true`. For example, negating
+  `{ fact: verified, op: eq, value: false }` matches when `verified` is
+  missing. Mark the fact `required` when absence must not pass.
+- Boolean signals compare `probabilityTrue`. Prefer `gte`/`lt` thresholds;
+  `eq`/`neq` on a probability is accepted but rarely matches as intended.
 
 ### Policy comparison
 
@@ -257,8 +271,9 @@ console.log(result.shadow.decision, result.comparison);
 ```
 
 The active and shadow envelopes have `live` and `shadow` modes respectively.
-Both are recorded when a recorder is attached, but only `active` should drive
-host side effects. A compatible pair must have the same policy name, fact
+The shadow envelope (and its record) carries `activeDecisionId`, the ID of the
+live decision it was evaluated beside. Both are recorded when a recorder is
+attached, but only `active` should drive host side effects. A compatible pair must have the same policy name, fact
 contract, question names, and question fingerprints. JevPolicy rejects an
 incompatible pair before invoking the provider. Compatible policies share one
 provider request, so shadow evaluation is intended for comparing policy logic
@@ -306,7 +321,9 @@ Do not place credentials or secrets in declared facts. Decision logs may contain
 sensitive facts, signals, or state, so keep them out of version control.
 
 If persistence fails, evaluation throws `RecorderError`; its `envelope` property
-contains the decision that was already computed.
+contains the live decision that was already computed, even when the failed
+write was the shadow record. During shadow evaluation `shadow` holds the shadow
+envelope, and `failedMode` names the record that could not be written.
 
 ### Ground-truth outcomes
 
@@ -372,7 +389,14 @@ console.log(report.summary, report.labels, report.transitions);
 ```
 
 The report contains label coverage, overall decision accuracy, per-label
-precision and recall, and predicted-to-observed transition counts. Undefined
+precision and recall, and predicted-to-observed transition counts.
+
+Reports analyze `live` records by default and list the policy versions they
+cover under `policies`. Pass `--mode shadow` (or `{ mode: 'shadow' }`) to score
+a shadow policy: each shadow record is judged against the outcome recorded for
+its `activeDecisionId`, so outcomes only ever need to reference live decisions.
+Use `--policy-fingerprint` (or `{ policyFingerprint }`) to analyze a single
+policy version. Undefined
 ratios are returned as `null`, never `NaN`. These metrics measure agreement
 between policy decisions and application-supplied labels; they do not claim to
 measure provider probability calibration.
@@ -402,7 +426,9 @@ const report = createConfidenceBandReport(records, outcomes, {
 The default boundaries are `0,0.2,0.4,0.6,0.8,1`. Reports remain separated by
 question fingerprint, signal type, and measure: Boolean probability true,
 Choice selected probability, Score peak probability, and optional Choice or
-Score confidence. Values outside the normalized range are counted explicitly.
+Score confidence. Values outside the normalized range are counted explicitly. The built-in
+Vercel Jev adapter does not receive a provider confidence value, so
+`confidence` groups appear only for custom providers that supply one.
 Bands measure the accuracy of the resulting policy decision against its outcome
 label; they do not treat a decision label as ground truth for an individual Jev
 question.

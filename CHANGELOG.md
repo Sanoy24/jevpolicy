@@ -2,6 +2,25 @@
 
 All notable changes will be documented here.
 
+## Unreleased
+
+- Added strict ground-truth outcome JSONL recording, loading, and joining with
+  decision records.
+- Added deterministic decision calibration reports and the
+  `jevpolicy calibrate` CLI command.
+- Added confidence-band analysis and the `jevpolicy confidence` CLI command.
+- Linked shadow envelopes and records to their live decision through
+  `activeDecisionId`; calibration and confidence reports now analyze live
+  records by default, support `mode` and `policyFingerprint` filters, and score
+  shadow decisions against their live decision's outcome.
+- `RecorderError.envelope` is now always the live envelope, with `shadow` and
+  `failedMode` describing shadow-evaluation write failures.
+- A caller-initiated abort now rejects instead of recording a provider-error
+  fallback.
+- Built-in object property names (for example `constructor`) are no longer
+  accepted as declared facts, signals, or choice values.
+- `createJevPolicyRuntime` forwards `providerOptions` to custom providers.
+
 ## 0.2.0 - 2026-09-24
 
 - Added compatible dual-policy shadow evaluation with one shared provider

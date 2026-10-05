@@ -249,6 +249,7 @@ export class DecisionRuntime {
     let providerMs: number | undefined;
     if (pending.length > 0) {
       const state = validateEvaluationState(input.state);
+      input.abortSignal?.throwIfAborted();
       const providerStartedAt = this.clock.monotonicMs();
       try {
         providerResult = await this.provider.evaluate(
@@ -261,6 +262,9 @@ export class DecisionRuntime {
           },
         );
       } catch (error) {
+        // A caller-initiated abort is a cancellation, not a provider failure,
+        // so it must not produce (or record) a fallback decision.
+        input.abortSignal?.throwIfAborted();
         providerFailed = true;
         providerFailure = error;
       }
@@ -379,12 +383,18 @@ export class DecisionRuntime {
     contexts: readonly EnvelopeContext[],
     input: RuntimeEvaluationInput,
   ): Promise<readonly DecisionEnvelope[]> {
-    const envelopes = contexts.map((context) => this.createEnvelope(context));
+    const envelopes: DecisionEnvelope[] = [];
+    for (const context of contexts) {
+      // The live envelope is always first; shadows link back to its ID.
+      envelopes.push(this.createEnvelope(context, envelopes[0]?.decisionId));
+    }
     for (const envelope of envelopes) {
       this.notifyObserver(envelope);
     }
     if (this.recorder === undefined || input.record === false) return envelopes;
 
+    const active = envelopes[0]!;
+    const shadow = envelopes[1];
     for (const [index, envelope] of envelopes.entries()) {
       try {
         const record = await createDecisionRecord({
@@ -398,8 +408,10 @@ export class DecisionRuntime {
         });
         await this.recorder.record(record);
       } catch (error) {
-        throw new RecorderError('Failed to record decision', envelope, {
+        throw new RecorderError('Failed to record decision', active, {
           cause: error,
+          failedMode: envelope.mode,
+          ...(shadow === undefined ? {} : { shadow }),
         });
       }
     }
@@ -416,7 +428,10 @@ export class DecisionRuntime {
     }
   }
 
-  private createEnvelope(context: EnvelopeContext): DecisionEnvelope {
+  private createEnvelope(
+    context: EnvelopeContext,
+    activeDecisionId: string | undefined,
+  ): DecisionEnvelope {
     const totalMs = Math.max(
       0,
       this.clock.monotonicMs() - context.totalStartedAt,
@@ -431,6 +446,9 @@ export class DecisionRuntime {
         fingerprint: context.policy.fingerprint,
       },
       mode: context.mode,
+      ...(context.mode === 'shadow' && activeDecisionId !== undefined
+        ? { activeDecisionId }
+        : {}),
       decision: context.deterministic.decision,
       matched: context.deterministic.matched,
       signals: context.signals,

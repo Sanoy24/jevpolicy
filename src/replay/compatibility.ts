@@ -1,4 +1,5 @@
 import { evaluatePolicy } from '../core/evaluator.js';
+import { ownValue } from '../core/records.js';
 import { validateFacts, validateSignals } from '../core/validation.js';
 import { ReplayCompatibilityError } from '../errors.js';
 import type { CompiledPolicy } from '../policy/compiler.js';
@@ -27,7 +28,7 @@ export function validateReplayCompatibility(
 
   const signals: Record<string, unknown> = {};
   for (const [name, question] of Object.entries(policy.questions)) {
-    const recorded = record.signals[name];
+    const recorded = ownValue(record.signals, name);
     if (recorded === undefined) {
       throw new ReplayCompatibilityError(
         `Record '${record.decisionId}' is missing signal '${name}'`,

@@ -17,7 +17,7 @@ export interface VercelJevProviderConfig {
 
 export interface CreateJevPolicyRuntimeOptions extends Omit<
   DecisionRuntimeOptions,
-  'provider' | 'providerOptions'
+  'provider'
 > {
   readonly provider: DecisionProvider | VercelJevProviderConfig;
 }
@@ -35,6 +35,9 @@ export function createJevPolicyRuntime(
     return new DecisionRuntime({
       policy: options.policy,
       provider: options.provider,
+      ...(options.providerOptions === undefined
+        ? {}
+        : { providerOptions: options.providerOptions }),
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       ...(options.idGenerator === undefined
         ? {}
@@ -61,6 +64,7 @@ export function createJevPolicyRuntime(
     policy: options.policy,
     provider: new VercelJevProvider(),
     providerOptions: {
+      ...options.providerOptions,
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
       ...(maxRetries === undefined ? {} : { maxRetries }),
     },

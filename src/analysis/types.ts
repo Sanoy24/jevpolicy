@@ -1,3 +1,24 @@
+import type { RuntimeMode } from '../runtime/types.js';
+
+export interface DecisionRecordFilter {
+  /** Record mode to analyze. Defaults to `live`. */
+  readonly mode?: RuntimeMode;
+  /** Restrict the analysis to one policy fingerprint. */
+  readonly policyFingerprint?: string;
+}
+
+export interface AnalysisSelection {
+  readonly mode: RuntimeMode;
+  readonly policyFingerprint?: string;
+}
+
+export interface AnalysisPolicy {
+  readonly name: string;
+  readonly version: number;
+  readonly fingerprint: string;
+  readonly records: number;
+}
+
 export interface CalibrationTransition {
   readonly predicted: string;
   readonly observed: string;
@@ -23,7 +44,11 @@ export interface CalibrationSummary {
   readonly accuracy: number | null;
 }
 
+export type CalibrationOptions = DecisionRecordFilter;
+
 export interface CalibrationReport {
+  readonly selection: AnalysisSelection;
+  readonly policies: readonly AnalysisPolicy[];
   readonly summary: CalibrationSummary;
   readonly labels: readonly CalibrationLabelMetrics[];
   readonly transitions: readonly CalibrationTransition[];
@@ -67,11 +92,13 @@ export interface ConfidenceBandSummary {
 }
 
 export interface ConfidenceBandReport {
+  readonly selection: AnalysisSelection;
+  readonly policies: readonly AnalysisPolicy[];
   readonly boundaries: readonly number[];
   readonly summary: ConfidenceBandSummary;
   readonly groups: readonly ConfidenceBandGroup[];
 }
 
-export interface ConfidenceBandOptions {
+export interface ConfidenceBandOptions extends DecisionRecordFilter {
   readonly boundaries?: readonly number[];
 }

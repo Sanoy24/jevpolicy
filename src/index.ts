@@ -137,7 +137,10 @@ export {
   createConfidenceBandReport,
 } from './analysis/index.js';
 export type {
+  AnalysisPolicy,
+  AnalysisSelection,
   CalibrationLabelMetrics,
+  CalibrationOptions,
   CalibrationReport,
   CalibrationSummary,
   CalibrationTransition,
@@ -147,4 +150,5 @@ export type {
   ConfidenceBandOptions,
   ConfidenceBandReport,
   ConfidenceBandSummary,
+  DecisionRecordFilter,
 } from './analysis/index.js';
