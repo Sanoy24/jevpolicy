@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { createCalibrationReport } from '../analysis/calibration.js';
+import { createConfidenceBandReport } from '../analysis/confidence.js';
 import {
   OutcomeValidationError,
   PolicyParseError,
@@ -30,7 +31,8 @@ function usage(): void {
   jevpolicy diff <base-policy.yaml> <candidate-policy.yaml> [--json]
   jevpolicy evaluate <policy.yaml> --state <state.json> [--facts <facts.json>] [--shadow-policy <candidate.yaml>] [--record <decisions.jsonl> | --no-record] [--json]
   jevpolicy replay <decisions.jsonl> --policy <policy.yaml> [--json]
-  jevpolicy calibrate <decisions.jsonl> --outcomes <outcomes.jsonl> [--json]`);
+  jevpolicy calibrate <decisions.jsonl> --outcomes <outcomes.jsonl> [--json]
+  jevpolicy confidence <decisions.jsonl> --outcomes <outcomes.jsonl> [--boundaries <0,0.2,...,1>] [--json]`);
 }
 
 interface ParsedArguments {
@@ -51,6 +53,7 @@ function parseArguments(args: readonly string[]): ParsedArguments | null {
     '--policy',
     '--shadow-policy',
     '--outcomes',
+    '--boundaries',
   ]);
   const flagOptions = new Set(['--json', '--no-record']);
 
@@ -304,6 +307,54 @@ async function calibrateCommand(options: {
   return 0;
 }
 
+function parseConfidenceBoundaries(value: string): readonly number[] {
+  const boundaries = value.split(',').map((entry) => Number(entry.trim()));
+  if (boundaries.some((entry) => !Number.isFinite(entry))) {
+    throw new RangeError(
+      'Confidence boundaries must be comma-separated finite numbers',
+    );
+  }
+  return boundaries;
+}
+
+async function confidenceCommand(options: {
+  readonly recordsPath: string;
+  readonly outcomesPath: string;
+  readonly boundaries?: readonly number[];
+  readonly json: boolean;
+}): Promise<number> {
+  const [records, outcomes] = await Promise.all([
+    loadDecisionRecords(resolve(options.recordsPath)),
+    loadDecisionOutcomes(resolve(options.outcomesPath)),
+  ]);
+  const result = createConfidenceBandReport(records, outcomes, {
+    ...(options.boundaries === undefined
+      ? {}
+      : { boundaries: options.boundaries }),
+  });
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`Records        ${result.summary.records}`);
+    console.log(`Labeled        ${result.summary.labeled}`);
+    console.log(`Unlabeled      ${result.summary.unlabeled}`);
+    console.log(`Coverage       ${formatPercentage(result.summary.coverage)}`);
+    console.log(`Observations   ${result.summary.observations}`);
+    console.log(`Out of range   ${result.summary.outOfRange}`);
+    for (const group of result.groups) {
+      console.log(`${group.question} [${group.signalType}/${group.measure}]`);
+      for (const band of group.bands) {
+        if (band.observations === 0) continue;
+        const closing = band.upperInclusive ? ']' : ')';
+        console.log(
+          `  [${band.lower}, ${band.upper}${closing}  ${band.observations}  accuracy=${formatPercentage(band.decisionAccuracy)}`,
+        );
+      }
+    }
+  }
+  return 0;
+}
+
 function reportError(error: unknown, json: boolean): number {
   if (error instanceof PolicyValidationError) {
     console.error(
@@ -389,6 +440,7 @@ export async function runCli(args: readonly string[]): Promise<number> {
       parsed.values.has('--state') &&
       !parsed.values.has('--policy') &&
       !parsed.values.has('--outcomes') &&
+      !parsed.values.has('--boundaries') &&
       !(parsed.flags.has('--no-record') && parsed.values.has('--record'))
     ) {
       return await evaluateCommand({
@@ -430,6 +482,26 @@ export async function runCli(args: readonly string[]): Promise<number> {
       return await calibrateCommand({
         recordsPath: parsed.positional[0]!,
         outcomesPath: parsed.values.get('--outcomes')!,
+        json,
+      });
+    }
+    if (
+      parsed.command === 'confidence' &&
+      parsed.positional.length === 1 &&
+      parsed.values.has('--outcomes') &&
+      parsed.values.size <= 2 &&
+      [...parsed.values.keys()].every(
+        (key) => key === '--outcomes' || key === '--boundaries',
+      ) &&
+      !parsed.flags.has('--no-record')
+    ) {
+      const boundaries = parsed.values.get('--boundaries');
+      return await confidenceCommand({
+        recordsPath: parsed.positional[0]!,
+        outcomesPath: parsed.values.get('--outcomes')!,
+        ...(boundaries === undefined
+          ? {}
+          : { boundaries: parseConfidenceBoundaries(boundaries) }),
         json,
       });
     }
