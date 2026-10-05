@@ -328,6 +328,94 @@ describe('CLI', () => {
     });
   });
 
+  it('calibrates shadow decisions with --mode shadow', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
+    temporaryDirectories.push(directory);
+    const recordsPath = join(directory, 'records.jsonl');
+    const outcomesPath = join(directory, 'outcomes.jsonl');
+    const base: DecisionRecord = {
+      format: 'jevpolicy.record/v1',
+      decisionId: 'cli-live',
+      timestamp: '2026-09-24T08:00:00.000Z',
+      policy: { name: 'cli-shadow', version: 1, fingerprint: 'a'.repeat(64) },
+      facts: {},
+      signals: {},
+      originalDecision: 'approve',
+      matched: {},
+      provider: {
+        adapter: 'vercel-jev',
+        model: 'typesafe-ai/jev',
+        invoked: true,
+      },
+      mode: 'live',
+    };
+    const shadow: DecisionRecord = {
+      ...base,
+      decisionId: 'cli-shadow',
+      policy: { name: 'cli-shadow', version: 2, fingerprint: 'b'.repeat(64) },
+      originalDecision: 'review',
+      mode: 'shadow',
+      activeDecisionId: base.decisionId,
+    };
+    const outcome: DecisionOutcome = {
+      format: 'jevpolicy.outcome/v1',
+      decisionId: base.decisionId,
+      label: 'review',
+      observedAt: '2026-09-24T09:00:00.000Z',
+    };
+    await Promise.all([
+      writeFile(
+        recordsPath,
+        `${JSON.stringify(base)}
+${JSON.stringify(shadow)}
+`,
+        'utf8',
+      ),
+      writeFile(
+        outcomesPath,
+        `${JSON.stringify(outcome)}
+`,
+        'utf8',
+      ),
+    ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const exitCode = await runCli([
+      'calibrate',
+      recordsPath,
+      '--outcomes',
+      outcomesPath,
+      '--mode',
+      'shadow',
+      '--json',
+    ]);
+
+    expect(exitCode).toBe(0);
+    const output: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(output).toMatchObject({
+      selection: { mode: 'shadow' },
+      policies: [{ version: 2, records: 1 }],
+      summary: { records: 1, labeled: 1, accuracy: 1 },
+    });
+  });
+
+  it('rejects an unsupported analysis mode', async () => {
+    const error = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    await expect(
+      runCli([
+        'calibrate',
+        'records.jsonl',
+        '--outcomes',
+        'outcomes.jsonl',
+        '--mode',
+        'replay',
+      ]),
+    ).resolves.toBe(1);
+    expect(error).toHaveBeenCalledWith("--mode must be 'live' or 'shadow'");
+  });
+
   it('returns usage status for malformed command arguments', async () => {
     const error = vi
       .spyOn(console, 'error')

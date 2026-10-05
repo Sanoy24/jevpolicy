@@ -24,6 +24,7 @@ import { JsonlRecorder } from '../recorders/jsonl-recorder.js';
 import { replayRecords } from '../replay/compatibility.js';
 import { loadDecisionRecords } from '../replay/loader.js';
 import { createJevPolicyRuntime } from '../runtime/factory.js';
+import type { DecisionRecordFilter } from '../analysis/types.js';
 
 function usage(): void {
   console.error(`Usage:
@@ -31,8 +32,8 @@ function usage(): void {
   jevpolicy diff <base-policy.yaml> <candidate-policy.yaml> [--json]
   jevpolicy evaluate <policy.yaml> --state <state.json> [--facts <facts.json>] [--shadow-policy <candidate.yaml>] [--record <decisions.jsonl> | --no-record] [--json]
   jevpolicy replay <decisions.jsonl> --policy <policy.yaml> [--json]
-  jevpolicy calibrate <decisions.jsonl> --outcomes <outcomes.jsonl> [--json]
-  jevpolicy confidence <decisions.jsonl> --outcomes <outcomes.jsonl> [--boundaries <0,0.2,...,1>] [--json]`);
+  jevpolicy calibrate <decisions.jsonl> --outcomes <outcomes.jsonl> [--mode <live|shadow>] [--policy-fingerprint <sha256>] [--json]
+  jevpolicy confidence <decisions.jsonl> --outcomes <outcomes.jsonl> [--boundaries <0,0.2,...,1>] [--mode <live|shadow>] [--policy-fingerprint <sha256>] [--json]`);
 }
 
 interface ParsedArguments {
@@ -54,6 +55,8 @@ function parseArguments(args: readonly string[]): ParsedArguments | null {
     '--shadow-policy',
     '--outcomes',
     '--boundaries',
+    '--mode',
+    '--policy-fingerprint',
   ]);
   const flagOptions = new Set(['--json', '--no-record']);
 
@@ -276,6 +279,37 @@ async function replayCommand(options: {
   return 0;
 }
 
+function parseRecordFilter(
+  values: ReadonlyMap<string, string>,
+): DecisionRecordFilter {
+  const mode = values.get('--mode');
+  if (mode !== undefined && mode !== 'live' && mode !== 'shadow') {
+    throw new RangeError("--mode must be 'live' or 'shadow'");
+  }
+  const policyFingerprint = values.get('--policy-fingerprint');
+  return {
+    ...(mode === undefined ? {} : { mode }),
+    ...(policyFingerprint === undefined ? {} : { policyFingerprint }),
+  };
+}
+
+function hasOnlyValues(
+  values: ReadonlyMap<string, string>,
+  allowed: readonly string[],
+): boolean {
+  return [...values.keys()].every((key) => allowed.includes(key));
+}
+
+function printSelection(selection: {
+  readonly mode: string;
+  readonly policyFingerprint?: string;
+}): void {
+  console.log(`Mode           ${selection.mode}`);
+  if (selection.policyFingerprint !== undefined) {
+    console.log(`Fingerprint    ${selection.policyFingerprint}`);
+  }
+}
+
 function formatPercentage(value: number | null): string {
   return value === null ? 'n/a' : `${(value * 100).toFixed(1)}%`;
 }
@@ -283,16 +317,18 @@ function formatPercentage(value: number | null): string {
 async function calibrateCommand(options: {
   readonly recordsPath: string;
   readonly outcomesPath: string;
+  readonly filter: DecisionRecordFilter;
   readonly json: boolean;
 }): Promise<number> {
   const [records, outcomes] = await Promise.all([
     loadDecisionRecords(resolve(options.recordsPath)),
     loadDecisionOutcomes(resolve(options.outcomesPath)),
   ]);
-  const result = createCalibrationReport(records, outcomes);
+  const result = createCalibrationReport(records, outcomes, options.filter);
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
+    printSelection(result.selection);
     console.log(`Records        ${result.summary.records}`);
     console.log(`Labeled        ${result.summary.labeled}`);
     console.log(`Unlabeled      ${result.summary.unlabeled}`);
@@ -321,6 +357,7 @@ async function confidenceCommand(options: {
   readonly recordsPath: string;
   readonly outcomesPath: string;
   readonly boundaries?: readonly number[];
+  readonly filter: DecisionRecordFilter;
   readonly json: boolean;
 }): Promise<number> {
   const [records, outcomes] = await Promise.all([
@@ -328,6 +365,7 @@ async function confidenceCommand(options: {
     loadDecisionOutcomes(resolve(options.outcomesPath)),
   ]);
   const result = createConfidenceBandReport(records, outcomes, {
+    ...options.filter,
     ...(options.boundaries === undefined
       ? {}
       : { boundaries: options.boundaries }),
@@ -335,6 +373,7 @@ async function confidenceCommand(options: {
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
+    printSelection(result.selection);
     console.log(`Records        ${result.summary.records}`);
     console.log(`Labeled        ${result.summary.labeled}`);
     console.log(`Unlabeled      ${result.summary.unlabeled}`);
@@ -441,6 +480,8 @@ export async function runCli(args: readonly string[]): Promise<number> {
       !parsed.values.has('--policy') &&
       !parsed.values.has('--outcomes') &&
       !parsed.values.has('--boundaries') &&
+      !parsed.values.has('--mode') &&
+      !parsed.values.has('--policy-fingerprint') &&
       !(parsed.flags.has('--no-record') && parsed.values.has('--record'))
     ) {
       return await evaluateCommand({
@@ -475,13 +516,18 @@ export async function runCli(args: readonly string[]): Promise<number> {
     if (
       parsed.command === 'calibrate' &&
       parsed.positional.length === 1 &&
-      parsed.values.size === 1 &&
       parsed.values.has('--outcomes') &&
+      hasOnlyValues(parsed.values, [
+        '--outcomes',
+        '--mode',
+        '--policy-fingerprint',
+      ]) &&
       !parsed.flags.has('--no-record')
     ) {
       return await calibrateCommand({
         recordsPath: parsed.positional[0]!,
         outcomesPath: parsed.values.get('--outcomes')!,
+        filter: parseRecordFilter(parsed.values),
         json,
       });
     }
@@ -489,10 +535,12 @@ export async function runCli(args: readonly string[]): Promise<number> {
       parsed.command === 'confidence' &&
       parsed.positional.length === 1 &&
       parsed.values.has('--outcomes') &&
-      parsed.values.size <= 2 &&
-      [...parsed.values.keys()].every(
-        (key) => key === '--outcomes' || key === '--boundaries',
-      ) &&
+      hasOnlyValues(parsed.values, [
+        '--outcomes',
+        '--boundaries',
+        '--mode',
+        '--policy-fingerprint',
+      ]) &&
       !parsed.flags.has('--no-record')
     ) {
       const boundaries = parsed.values.get('--boundaries');
@@ -502,6 +550,7 @@ export async function runCli(args: readonly string[]): Promise<number> {
         ...(boundaries === undefined
           ? {}
           : { boundaries: parseConfidenceBoundaries(boundaries) }),
+        filter: parseRecordFilter(parsed.values),
         json,
       });
     }

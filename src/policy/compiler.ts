@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { hasOwn, ownValue } from '../core/records.js';
 import { PolicyValidationError, type PolicyIssue } from '../errors.js';
 import {
   policySchema,
@@ -195,7 +196,7 @@ function validateSignalCondition(
   for (const comparedValue of comparedValues) {
     if (
       typeof comparedValue !== 'string' ||
-      !(comparedValue in question.criteria)
+      !hasOwn(question.criteria, comparedValue)
     ) {
       issues.push(
         issue(
@@ -245,7 +246,7 @@ function validateCondition(
     return;
   }
   if ('fact' in condition) {
-    const definition = context.policy.facts[condition.fact];
+    const definition = ownValue(context.policy.facts, condition.fact);
     if (definition === undefined) {
       context.issues.push(
         issue(
@@ -277,7 +278,7 @@ function validateCondition(
     );
     return;
   }
-  const question = context.policy.questions[condition.signal];
+  const question = ownValue(context.policy.questions, condition.signal);
   if (question === undefined) {
     context.issues.push(
       issue(

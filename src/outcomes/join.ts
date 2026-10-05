@@ -38,7 +38,13 @@ export function joinDecisionOutcomes(
   const labeled: LabeledDecisionRecord[] = [];
   const unlabeledDecisionIds: string[] = [];
   for (const record of records) {
-    const outcome = outcomesById.get(record.decisionId);
+    // A shadow decision is judged against the outcome of the live decision it
+    // was evaluated beside, since only the live decision reached the world.
+    const outcome =
+      (record.activeDecisionId === undefined
+        ? undefined
+        : outcomesById.get(record.activeDecisionId)) ??
+      outcomesById.get(record.decisionId);
     if (outcome === undefined) {
       unlabeledDecisionIds.push(record.decisionId);
       continue;

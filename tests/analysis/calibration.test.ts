@@ -4,7 +4,11 @@ import { createCalibrationReport } from '../../src/analysis/calibration.js';
 import type { DecisionOutcome } from '../../src/outcomes/types.js';
 import type { DecisionRecord } from '../../src/recorders/types.js';
 
-function record(decisionId: string, decision: string): DecisionRecord {
+function record(
+  decisionId: string,
+  decision: string,
+  overrides: Partial<DecisionRecord> = {},
+): DecisionRecord {
   return {
     format: 'jevpolicy.record/v1',
     decisionId,
@@ -24,6 +28,7 @@ function record(decisionId: string, decision: string): DecisionRecord {
       invoked: false,
     },
     mode: 'live',
+    ...overrides,
   };
 }
 
@@ -128,5 +133,87 @@ describe('calibration reports', () => {
         recall: null,
       },
     ]);
+  });
+
+  it('analyzes live records by default and reports the selected policies', () => {
+    const report = createCalibrationReport(
+      [
+        record('live', 'approve'),
+        record('shadow', 'review', {
+          mode: 'shadow',
+          activeDecisionId: 'live',
+        }),
+      ],
+      [outcome('live', 'approve')],
+    );
+
+    expect(report.selection).toEqual({ mode: 'live' });
+    expect(report.policies).toEqual([
+      {
+        name: 'calibration-contract',
+        version: 1,
+        fingerprint: 'a'.repeat(64),
+        records: 1,
+      },
+    ]);
+    expect(report.summary).toMatchObject({
+      records: 1,
+      labeled: 1,
+      coverage: 1,
+      accuracy: 1,
+    });
+  });
+
+  it('scores shadow decisions against the outcome of their live decision', () => {
+    const report = createCalibrationReport(
+      [
+        record('live', 'approve'),
+        record('shadow', 'review', {
+          mode: 'shadow',
+          activeDecisionId: 'live',
+        }),
+        record('legacy-shadow', 'review', { mode: 'shadow' }),
+      ],
+      [outcome('live', 'review')],
+      { mode: 'shadow' },
+    );
+
+    expect(report.selection).toEqual({ mode: 'shadow' });
+    expect(report.summary).toMatchObject({
+      records: 2,
+      labeled: 1,
+      unlabeled: 1,
+      correct: 1,
+      accuracy: 1,
+    });
+  });
+
+  it('filters by policy fingerprint without loosening outcome validation', () => {
+    const records = [
+      record('old', 'approve'),
+      record('new', 'review', {
+        policy: {
+          name: 'calibration-contract',
+          version: 2,
+          fingerprint: 'b'.repeat(64),
+        },
+      }),
+    ];
+    const outcomes = [outcome('old', 'approve'), outcome('new', 'approve')];
+
+    const report = createCalibrationReport(records, outcomes, {
+      policyFingerprint: 'b'.repeat(64),
+    });
+    expect(report.selection).toEqual({
+      mode: 'live',
+      policyFingerprint: 'b'.repeat(64),
+    });
+    expect(report.summary).toMatchObject({ records: 1, accuracy: 0 });
+
+    expect(() =>
+      createCalibrationReport(records, [outcome('unknown', 'approve')], {
+        policyFingerprint: 'b'.repeat(64),
+      }),
+    ).toThrow(/unknown decision/);
   });
 });

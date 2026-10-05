@@ -1,4 +1,6 @@
 # Changesets
 
-User-facing changes should include a changeset before the first published release.
-The package remains at `0.0.0` until the v0.1 contract is complete.
+Every user-facing change should include a changeset describing it.
+Releases are cut manually: the pending changesets are folded into
+`CHANGELOG.md`, `package.json` is bumped, and the consumed changesets are
+deleted in the release PR.

@@ -173,6 +173,41 @@ describe('compilePolicy', () => {
     expectIssue(policy, 'unknown_choice_value');
   });
 
+  it.each(['constructor', 'toString', 'hasOwnProperty'])(
+    "does not treat the built-in property '%s' as a declared name",
+    (name) => {
+      const choice = validPolicy();
+      choice['rules'] = [
+        {
+          id: 'prototype-choice',
+          when: { signal: 'category', op: 'eq', value: name },
+          decision: 'human_review',
+        },
+      ];
+      expectIssue(choice, 'unknown_choice_value');
+
+      const fact = validPolicy();
+      fact['preconditions'] = [
+        {
+          id: 'prototype-fact',
+          when: { fact: name, op: 'eq', value: true },
+          decision: 'human_review',
+        },
+      ];
+      expectIssue(fact, 'unknown_fact');
+
+      const signal = validPolicy();
+      signal['rules'] = [
+        {
+          id: 'prototype-signal',
+          when: { signal: name, op: 'eq', value: 'billing' },
+          decision: 'human_review',
+        },
+      ];
+      expectIssue(signal, 'unknown_signal');
+    },
+  );
+
   it('rejects score thresholds outside the declared rubric', () => {
     const policy = validPolicy();
     policy['rules'] = [

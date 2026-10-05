@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { ownValue } from '../core/records.js';
 import { validateFacts } from '../core/validation.js';
 import { StateValidationError } from '../errors.js';
 import type { CompiledPolicy } from '../policy/compiler.js';
@@ -45,7 +46,7 @@ export async function createDecisionRecord({
   const validatedFacts = validateFacts(policy, facts);
   const signals: Record<string, RecordedSignal> = {};
   for (const [name, signal] of Object.entries(envelope.signals)) {
-    const question = policy.questions[name];
+    const question = ownValue(policy.questions, name);
     if (question === undefined) {
       throw new StateValidationError(
         `Cannot record undeclared signal '${name}'`,
@@ -93,5 +94,8 @@ export async function createDecisionRecord({
     matched: envelope.matched,
     provider: envelope.provider,
     mode: envelope.mode,
+    ...(envelope.activeDecisionId === undefined
+      ? {}
+      : { activeDecisionId: envelope.activeDecisionId }),
   });
 }

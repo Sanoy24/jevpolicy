@@ -529,6 +529,117 @@ describe('DecisionRuntime', () => {
     expect(records.map((record) => record.policy.version)).toEqual([2, 3]);
   });
 
+  it('links shadow envelopes and records to their live decision', async () => {
+    const records: DecisionRecord[] = [];
+    const ids = ['active-decision', 'shadow-decision'];
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(() => Promise.resolve(successfulResult())),
+      idGenerator: () => ids.shift()!,
+      recorder: {
+        record: (record) => {
+          records.push(record);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    const result = await runtime.evaluateWithShadow({
+      shadowPolicy: shadowPolicy(),
+      state: 'test',
+      facts: { authenticated: true },
+    });
+
+    expect(result.active).not.toHaveProperty('activeDecisionId');
+    expect(result.shadow.activeDecisionId).toBe('active-decision');
+    expect(records[0]).not.toHaveProperty('activeDecisionId');
+    expect(records[1]?.activeDecisionId).toBe('active-decision');
+  });
+
+  it('reports the live envelope when only the shadow record fails to persist', async () => {
+    let writes = 0;
+    const ids = ['active-decision', 'shadow-decision'];
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(() => Promise.resolve(successfulResult())),
+      idGenerator: () => ids.shift()!,
+      recorder: {
+        record: () => {
+          writes += 1;
+          return writes === 2
+            ? Promise.reject(new Error('disk full'))
+            : Promise.resolve();
+        },
+      },
+    });
+
+    const error = await runtime
+      .evaluateWithShadow({
+        shadowPolicy: shadowPolicy(),
+        state: 'test',
+        facts: { authenticated: true },
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(RecorderError);
+    const recorderError = error as RecorderError;
+    expect(recorderError.envelope).toMatchObject({
+      decisionId: 'active-decision',
+      mode: 'live',
+    });
+    expect(recorderError.shadow).toMatchObject({
+      decisionId: 'shadow-decision',
+      mode: 'shadow',
+    });
+    expect(recorderError.failedMode).toBe('shadow');
+  });
+
+  it('rejects instead of falling back when the caller aborts', async () => {
+    const records: DecisionRecord[] = [];
+    const abortController = new AbortController();
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(() => {
+        abortController.abort(new Error('caller cancelled'));
+        return Promise.reject(
+          new ProviderError('Provider evaluation failed', providerErrorOptions),
+        );
+      }),
+      recorder: {
+        record: (record) => {
+          records.push(record);
+          return Promise.resolve();
+        },
+      },
+    });
+
+    await expect(
+      runtime.evaluate({
+        state: 'test',
+        facts: { authenticated: true },
+        abortSignal: abortController.signal,
+      }),
+    ).rejects.toThrow('caller cancelled');
+    expect(records).toHaveLength(0);
+  });
+
+  it('does not call the provider when the caller has already aborted', async () => {
+    const evaluate = vi.fn(() => Promise.resolve(successfulResult()));
+    const runtime = new DecisionRuntime({
+      policy: policy(),
+      provider: provider(evaluate),
+    });
+
+    await expect(
+      runtime.evaluate({
+        state: 'test',
+        facts: { authenticated: true },
+        abortSignal: AbortSignal.abort(),
+      }),
+    ).rejects.toThrow();
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   it('observes active and shadow envelopes separately', async () => {
     const observe = vi.fn<DecisionObserver['observe']>();
     const runtime = new DecisionRuntime({
@@ -608,6 +719,24 @@ describe('createJevPolicyRuntime', () => {
       provider: customProvider,
     });
     expect(runtime.provider).toBe(customProvider);
+  });
+
+  it('forwards provider options to an injected provider', async () => {
+    const evaluate = vi.fn<DecisionProvider['evaluate']>(() =>
+      Promise.resolve(successfulResult()),
+    );
+    const runtime = createJevPolicyRuntime({
+      policy: policy(),
+      provider: provider(evaluate),
+      providerOptions: { timeoutMs: 1_500, maxRetries: 0 },
+    });
+
+    await runtime.evaluate({ state: 'test', facts: { authenticated: true } });
+
+    expect(evaluate.mock.calls[0]?.[1]).toEqual({
+      timeoutMs: 1_500,
+      maxRetries: 0,
+    });
   });
 
   it('constructs the supported Vercel JEV adapter from public config', () => {

@@ -1,5 +1,6 @@
 import { StateValidationError } from '../errors.js';
 import type { CompiledPolicy, CompiledQuestion } from '../policy/compiler.js';
+import { hasOwn } from './records.js';
 import type {
   ChoiceSignal,
   DecisionSignal,
@@ -25,10 +26,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   }
   const prototype = Object.getPrototypeOf(value) as unknown;
   return prototype === Object.prototype || prototype === null;
-}
-
-function hasOwn(record: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(record, key);
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -128,7 +125,7 @@ function validateChoiceSignal(
   );
   if (
     typeof raw['value'] !== 'string' ||
-    !(raw['value'] in question.criteria)
+    !hasOwn(question.criteria, raw['value'])
   ) {
     throw new SignalValidationError(
       `Choice signal '${signalName}' must select a declared criterion`,

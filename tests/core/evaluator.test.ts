@@ -194,6 +194,42 @@ describe('evaluatePolicy', () => {
     });
   });
 
+  it('rejects a choice signal that names a built-in object property', () => {
+    expect(() =>
+      validateSignals(
+        compilePolicy(policyDefinition()),
+        signals({ category: { type: 'choice', value: 'toString' } }),
+      ),
+    ).toThrow(SignalValidationError);
+  });
+
+  it('treats a missing optional fact named after a built-in property as missing', () => {
+    const definition = policyDefinition();
+    definition['facts'] = {
+      authenticated: { type: 'boolean', required: true },
+      region: { type: 'string', required: false },
+      constructor: { type: 'string', required: false },
+    };
+    definition['preconditions'] = [
+      {
+        id: 'prototype-fact',
+        when: { not: { fact: 'constructor', op: 'eq', value: 'x' } },
+        decision: 'human_review',
+      },
+    ];
+
+    const result = evaluatePolicy({
+      policy: compilePolicy(definition),
+      facts: { authenticated: true },
+      signals: signals(),
+    });
+
+    expect(result.trace.evaluations[0]?.condition).toMatchObject({
+      kind: 'not',
+      child: { kind: 'fact', name: 'constructor', missing: true },
+    });
+  });
+
   it('short-circuits failed all conditions in the trace', () => {
     const result = evaluatePolicy({
       policy: compilePolicy(policyDefinition()),

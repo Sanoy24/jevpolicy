@@ -1,8 +1,9 @@
-import { joinDecisionOutcomes } from '../outcomes/join.js';
 import type { DecisionOutcome } from '../outcomes/types.js';
 import type { DecisionRecord } from '../recorders/types.js';
+import { selectLabeledRecords } from './selection.js';
 import type {
   CalibrationLabelMetrics,
+  CalibrationOptions,
   CalibrationReport,
   CalibrationTransition,
 } from './types.js';
@@ -58,8 +59,9 @@ function transitionMetrics(
 export function createCalibrationReport(
   records: readonly DecisionRecord[],
   outcomes: readonly DecisionOutcome[],
+  options: CalibrationOptions = {},
 ): CalibrationReport {
-  const joined = joinDecisionOutcomes(records, outcomes);
+  const selected = selectLabeledRecords(records, outcomes, options);
   const labels = new Map<string, MutableLabelMetrics>();
   const transitions = new Map<string, Map<string, number>>();
   let correct = 0;
@@ -76,7 +78,7 @@ export function createCalibrationReport(
     return created;
   };
 
-  for (const { record, outcome } of joined.labeled) {
+  for (const { record, outcome } of selected.labeled) {
     const predicted = record.originalDecision;
     const observed = outcome.label;
     getLabel(predicted).predicted += 1;
@@ -94,15 +96,18 @@ export function createCalibrationReport(
     observedCounts.set(observed, (observedCounts.get(observed) ?? 0) + 1);
   }
 
+  const labeled = selected.labeled.length;
   return Object.freeze({
+    selection: selected.selection,
+    policies: selected.policies,
     summary: Object.freeze({
-      records: joined.summary.records,
-      labeled: joined.summary.labeled,
-      unlabeled: joined.summary.unlabeled,
-      coverage: ratio(joined.summary.labeled, joined.summary.records),
+      records: selected.records,
+      labeled,
+      unlabeled: selected.unlabeled,
+      coverage: ratio(labeled, selected.records),
       correct,
-      incorrect: joined.summary.labeled - correct,
-      accuracy: ratio(correct, joined.summary.labeled),
+      incorrect: labeled - correct,
+      accuracy: ratio(correct, labeled),
     }),
     labels: labelMetrics(labels),
     transitions: transitionMetrics(transitions),
