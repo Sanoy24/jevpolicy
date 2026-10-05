@@ -2,7 +2,7 @@
 
 All notable changes will be documented here.
 
-## Unreleased
+## 0.3.0 - 2026-10-05
 
 - Added strict ground-truth outcome JSONL recording, loading, and joining with
   decision records.
