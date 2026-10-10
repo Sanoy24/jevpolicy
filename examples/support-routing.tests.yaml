@@ -1,0 +1,48 @@
+schema: jevpolicy.tests/v1
+cases:
+  - name: unauthenticated tickets require review before judging
+    facts: { authenticated: false }
+    expect:
+      decision: human_review
+      matched: { preconditionId: unauthenticated }
+      fallback: { used: false }
+
+  - name: simple billing tickets reach the billing queue
+    facts: { authenticated: true }
+    signals:
+      category: { type: choice, value: billing }
+      urgent: { type: boolean, probabilityTrue: 0.2 }
+      complexity: { type: score, value: 1 }
+    expect:
+      decision: billing
+      matched: { ruleId: billing-route }
+
+  - name: complex urgent tickets take priority over category routing
+    facts: { authenticated: true }
+    signals:
+      category: { type: choice, value: billing }
+      urgent: { type: boolean, probabilityTrue: 0.7 }
+      complexity: { type: score, value: 4 }
+    expect:
+      decision: human_review
+      matched: { ruleId: complex-and-urgent }
+
+  - name: complexity alone does not trigger urgent review
+    facts: { authenticated: true }
+    signals:
+      category: { type: choice, value: technical }
+      urgent: { type: boolean, probabilityTrue: 0.69 }
+      complexity: { type: score, value: 4 }
+    expect:
+      decision: technical
+      matched: { ruleId: technical-route }
+
+  - name: account requests reach the account queue
+    facts: { authenticated: true }
+    signals:
+      category: { type: choice, value: account }
+      urgent: { type: boolean, probabilityTrue: 0.3 }
+      complexity: { type: score, value: 2 }
+    expect:
+      decision: account
+      matched: { ruleId: account-route }

@@ -116,3 +116,13 @@ export class ShadowCompatibilityError extends Error {
     this.name = 'ShadowCompatibilityError';
   }
 }
+
+export class PolicyTestValidationError extends Error {
+  readonly source: string | undefined;
+
+  constructor(message: string, options?: { source?: string; cause?: unknown }) {
+    super(message, { cause: options?.cause });
+    this.name = 'PolicyTestValidationError';
+    this.source = options?.source;
+  }
+}
