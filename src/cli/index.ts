@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 import { createCalibrationReport } from '../analysis/calibration.js';
 import { createConfidenceBandReport } from '../analysis/confidence.js';
+import { createRuleFrequencyReport } from '../analysis/frequency.js';
 import {
   OutcomeValidationError,
   PolicyParseError,
@@ -33,7 +34,8 @@ function usage(): void {
   jevpolicy evaluate <policy.yaml> --state <state.json> [--facts <facts.json>] [--shadow-policy <candidate.yaml>] [--record <decisions.jsonl> | --no-record] [--json]
   jevpolicy replay <decisions.jsonl> --policy <policy.yaml> [--json]
   jevpolicy calibrate <decisions.jsonl> --outcomes <outcomes.jsonl> [--mode <live|shadow>] [--policy-fingerprint <sha256>] [--json]
-  jevpolicy confidence <decisions.jsonl> --outcomes <outcomes.jsonl> [--boundaries <0,0.2,...,1>] [--mode <live|shadow>] [--policy-fingerprint <sha256>] [--json]`);
+  jevpolicy confidence <decisions.jsonl> --outcomes <outcomes.jsonl> [--boundaries <0,0.2,...,1>] [--mode <live|shadow>] [--policy-fingerprint <sha256>] [--json]
+  jevpolicy frequency <decisions.jsonl> [--mode <live|shadow>] [--policy-fingerprint <sha256>] [--json]`);
 }
 
 interface ParsedArguments {
@@ -394,6 +396,40 @@ async function confidenceCommand(options: {
   return 0;
 }
 
+async function frequencyCommand(options: {
+  readonly recordsPath: string;
+  readonly filter: DecisionRecordFilter;
+  readonly json: boolean;
+}): Promise<number> {
+  const records = await loadDecisionRecords(resolve(options.recordsPath));
+  const result = createRuleFrequencyReport(records, options.filter);
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    printSelection(result.selection);
+    console.log(`Records        ${result.summary.records}`);
+    console.log(`Policies       ${result.summary.policies}`);
+    console.log(`Preconditions  ${result.summary.preconditionMatches}`);
+    console.log(`Rules          ${result.summary.ruleMatches}`);
+    console.log(`Unmatched      ${result.summary.unmatched}`);
+    for (const policy of result.policies) {
+      console.log(
+        `${policy.name}@${policy.version} ${policy.fingerprint} (${policy.records})`,
+      );
+      for (const match of policy.matches) {
+        const branch =
+          match.kind === 'unmatched'
+            ? 'unmatched'
+            : `${match.kind}:${match.id}`;
+        console.log(
+          `  ${branch} -> ${match.decision}  ${match.count} (${formatPercentage(match.rate)})`,
+        );
+      }
+    }
+  }
+  return 0;
+}
+
 function reportError(error: unknown, json: boolean): number {
   if (error instanceof PolicyValidationError) {
     console.error(
@@ -550,6 +586,18 @@ export async function runCli(args: readonly string[]): Promise<number> {
         ...(boundaries === undefined
           ? {}
           : { boundaries: parseConfidenceBoundaries(boundaries) }),
+        filter: parseRecordFilter(parsed.values),
+        json,
+      });
+    }
+    if (
+      parsed.command === 'frequency' &&
+      parsed.positional.length === 1 &&
+      hasOnlyValues(parsed.values, ['--mode', '--policy-fingerprint']) &&
+      !parsed.flags.has('--no-record')
+    ) {
+      return await frequencyCommand({
+        recordsPath: parsed.positional[0]!,
         filter: parseRecordFilter(parsed.values),
         json,
       });

@@ -135,6 +135,7 @@ export {
   DEFAULT_CONFIDENCE_BAND_BOUNDARIES,
   createCalibrationReport,
   createConfidenceBandReport,
+  createRuleFrequencyReport,
 } from './analysis/index.js';
 export type {
   AnalysisPolicy,
@@ -151,4 +152,10 @@ export type {
   ConfidenceBandReport,
   ConfidenceBandSummary,
   DecisionRecordFilter,
+  RuleFrequencyMatch,
+  RuleFrequencyMatchKind,
+  RuleFrequencyOptions,
+  RuleFrequencyPolicy,
+  RuleFrequencyReport,
+  RuleFrequencySummary,
 } from './analysis/index.js';

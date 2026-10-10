@@ -3,6 +3,7 @@ export {
   DEFAULT_CONFIDENCE_BAND_BOUNDARIES,
   createConfidenceBandReport,
 } from './confidence.js';
+export { createRuleFrequencyReport } from './frequency.js';
 export type {
   AnalysisPolicy,
   AnalysisSelection,
@@ -18,4 +19,10 @@ export type {
   ConfidenceBandReport,
   ConfidenceBandSummary,
   DecisionRecordFilter,
+  RuleFrequencyMatch,
+  RuleFrequencyMatchKind,
+  RuleFrequencyOptions,
+  RuleFrequencyPolicy,
+  RuleFrequencyReport,
+  RuleFrequencySummary,
 } from './types.js';
