@@ -1,6 +1,7 @@
 export {
   PolicyParseError,
   PolicyValidationError,
+  PolicyTestValidationError,
   OutcomeValidationError,
   ProviderError,
   ProviderResponseError,
@@ -159,3 +160,15 @@ export type {
   RuleFrequencyReport,
   RuleFrequencySummary,
 } from './analysis/index.js';
+export {
+  loadPolicyTests,
+  parsePolicyTests,
+  runPolicyTests,
+} from './testing/index.js';
+export type {
+  PolicyTestCase,
+  PolicyTestExpectation,
+  PolicyTestReport,
+  PolicyTestResult,
+  PolicyTestSuite,
+} from './testing/index.js';

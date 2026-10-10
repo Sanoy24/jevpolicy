@@ -26,10 +26,12 @@ import { replayRecords } from '../replay/compatibility.js';
 import { loadDecisionRecords } from '../replay/loader.js';
 import { createJevPolicyRuntime } from '../runtime/factory.js';
 import type { DecisionRecordFilter } from '../analysis/types.js';
+import { loadPolicyTests, runPolicyTests } from '../testing/index.js';
 
 function usage(): void {
   console.error(`Usage:
   jevpolicy validate <policy.yaml> [--json]
+  jevpolicy test <tests.yaml> --policy <policy.yaml> [--json]
   jevpolicy diff <base-policy.yaml> <candidate-policy.yaml> [--json]
   jevpolicy evaluate <policy.yaml> --state <state.json> [--facts <facts.json>] [--shadow-policy <candidate.yaml>] [--record <decisions.jsonl> | --no-record] [--json]
   jevpolicy replay <decisions.jsonl> --policy <policy.yaml> [--json]
@@ -141,6 +143,33 @@ async function validateCommand(path: string, json: boolean): Promise<number> {
     console.log(`Fingerprint: ${policy.fingerprint}`);
   }
   return 0;
+}
+
+async function testCommand(
+  testsPath: string,
+  policyPath: string,
+  json: boolean,
+): Promise<number> {
+  const [policy, suite] = await Promise.all([
+    loadPolicyFile(resolve(policyPath)),
+    loadPolicyTests(resolve(testsPath)),
+  ]);
+  const report = runPolicyTests(policy, suite);
+  if (json) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    console.log(`Policy         ${policy.name}@${policy.version}`);
+    for (const result of report.results) {
+      console.log(`${result.status.toUpperCase()} ${result.name}`);
+      const details =
+        result.status === 'error' ? [result.error] : result.failures;
+      for (const detail of details) console.log(`  ${detail}`);
+    }
+    console.log(
+      `${report.summary.cases} cases: ${report.summary.passed} passed, ${report.summary.failed} failed, ${report.summary.errors} errors`,
+    );
+  }
+  return report.passed ? 0 : 1;
 }
 
 function formatChangeValue(value: unknown): string {
@@ -489,6 +518,19 @@ export async function runCli(args: readonly string[]): Promise<number> {
   const json = parsed.flags.has('--json');
 
   try {
+    if (
+      parsed.command === 'test' &&
+      parsed.positional.length === 1 &&
+      parsed.values.size === 1 &&
+      parsed.values.has('--policy') &&
+      !parsed.flags.has('--no-record')
+    ) {
+      return await testCommand(
+        parsed.positional[0]!,
+        parsed.values.get('--policy')!,
+        json,
+      );
+    }
     if (
       parsed.command === 'validate' &&
       parsed.positional.length === 1 &&

@@ -20,6 +20,7 @@ afterEach(async () => {
     await rm(join(directory, 'candidate-policy.yaml'), { force: true });
     await rm(join(directory, 'shadow-policy.yaml'), { force: true });
     await rm(join(directory, 'state.json'), { force: true });
+    await rm(join(directory, 'tests.yaml'), { force: true });
     await rmdir(directory);
   }
 });
@@ -61,6 +62,79 @@ function policyDefinition(threshold: number): Record<string, unknown> {
 }
 
 describe('CLI', () => {
+  it('runs the example fixtures and emits a JSON report', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    expect(
+      await runCli([
+        'test',
+        'examples/support-routing.tests.yaml',
+        '--policy',
+        'examples/support-routing.policy.yaml',
+        '--json',
+      ]),
+    ).toBe(0);
+    const output: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(output).toMatchObject({
+      passed: true,
+      summary: { cases: 5, passed: 5, failed: 0, errors: 0 },
+    });
+  });
+
+  it('returns a failing status for fixture mismatches and case errors', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
+    temporaryDirectories.push(directory);
+    const testsPath = join(directory, 'tests.yaml');
+    await writeFile(
+      testsPath,
+      `
+schema: jevpolicy.tests/v1
+cases:
+  - name: wrong decision
+    facts: {authenticated: false}
+    expect: {decision: billing}
+  - name: missing input
+    expect: {decision: human_review}
+`,
+      'utf8',
+    );
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    expect(
+      await runCli([
+        'test',
+        testsPath,
+        '--policy',
+        'examples/support-routing.policy.yaml',
+      ]),
+    ).toBe(1);
+    expect(log).toHaveBeenCalledWith('FAILED wrong decision');
+    expect(log).toHaveBeenCalledWith('ERROR missing input');
+    expect(log).toHaveBeenCalledWith('2 cases: 0 passed, 1 failed, 1 errors');
+  });
+
+  it('rejects malformed test command arguments without loading files', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(await runCli(['test', 'tests.yaml'])).toBe(2);
+    expect(
+      await runCli([
+        'test',
+        'tests.yaml',
+        '--policy',
+        'policy.yaml',
+        '--no-record',
+      ]),
+    ).toBe(2);
+    expect(
+      await runCli([
+        'test',
+        'tests.yaml',
+        '--policy',
+        'policy.yaml',
+        '--state',
+        'state.json',
+      ]),
+    ).toBe(2);
+  });
+
   it('diffs two policy files offline and emits structured JSON', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
     temporaryDirectories.push(directory);

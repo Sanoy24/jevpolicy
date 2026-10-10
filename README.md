@@ -182,6 +182,64 @@ is available for validate, diff, evaluate, and replay.
 
 ## Library usage
 
+### Test policies offline
+
+Keep regression cases alongside a policy to check routing, rule order, and
+threshold boundaries before deploying changes. Fixtures supply deterministic
+facts and normalized signals directly:
+
+```yaml
+schema: jevpolicy.tests/v1
+cases:
+  - name: billing tickets reach the billing queue
+    facts: { authenticated: true }
+    signals:
+      category: { type: choice, value: billing }
+      urgent: { type: boolean, probabilityTrue: 0.2 }
+      complexity: { type: score, value: 1 }
+    expect:
+      decision: billing
+      matched: { ruleId: billing-route }
+      fallback: { used: false }
+```
+
+Run the included fixture suite from source:
+
+```bash
+npm run cli -- test examples/support-routing.tests.yaml \
+  --policy examples/support-routing.policy.yaml
+```
+
+Use `--json` for a structured report containing each result and its decision
+trace. The command exits with `0` when all cases pass, `1` for failed assertions,
+invalid inputs, or file errors, and `2` for invalid command arguments.
+
+`expect.decision` is required. Optional `expect.matched` checks the exact winning
+branch; `{}` asserts that no branch matched. Optional `expect.fallback` checks
+fallback use and, when used, the `no_match` reason. A terminating precondition
+can omit signals; other cases must supply every declared question. Supplied
+signals and facts are validated, including rejecting unknown names. Invalid
+case inputs are reported as errors while the remaining cases still run.
+
+```ts
+import {
+  loadPolicyFile,
+  loadPolicyTests,
+  runPolicyTests,
+} from '@sanoy24/jevpolicy';
+
+const policy = await loadPolicyFile('./policy.yaml');
+const suite = await loadPolicyTests('./policy.tests.yaml');
+const report = runPolicyTests(policy, suite);
+console.log(report.passed, report.summary, report.results);
+```
+
+Fixtures run entirely offline and create no decision logs. They test policy
+logic over supplied judgments; live provider behavior and provider-error
+fallbacks require separate integration tests.
+
+### Embed the runtime
+
 The same runtime can be embedded directly in a TypeScript application:
 
 ```ts
