@@ -433,6 +433,37 @@ Bands measure the accuracy of the resulting policy decision against its outcome
 label; they do not treat a decision label as ground truth for an individual Jev
 question.
 
+### Rule-frequency analysis
+
+Inspect which policy branches are producing decisions from a JSONL decision
+log. This report does not require outcome labels:
+
+```bash
+npm run cli -- frequency ./decisions.jsonl --json
+```
+
+The same report is available through the library:
+
+```ts
+import { createRuleFrequencyReport } from '@sanoy24/jevpolicy';
+
+const report = createRuleFrequencyReport(records);
+console.log(report.summary, report.policies);
+```
+
+Counts and rates are grouped by policy fingerprint, so rules with the same ID
+in different policy versions are never combined. The report separates matched
+preconditions, matched rules, and records with no matched branch. Use `--mode`
+and `--policy-fingerprint` to apply the same selection rules as the calibration
+and confidence commands.
+
+Each rate is the count divided by the selected records for that policy version.
+Counts describe the branch that produced the final decision; they do not count
+every condition evaluated along the way. Only observed branches appear, so the
+report cannot identify unused rules without the original policy definition.
+Unmatched records may represent a no-match fallback or a provider failure;
+the record format does not preserve the reason needed to distinguish them.
+
 ## Responsibility boundary
 
 ### Vercel AI Gateway owns

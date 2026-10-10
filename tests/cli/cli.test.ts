@@ -399,6 +399,57 @@ ${JSON.stringify(shadow)}
     });
   });
 
+  it('reports rule frequencies without outcomes', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'jevpolicy-cli-'));
+    temporaryDirectories.push(directory);
+    const recordsPath = join(directory, 'records.jsonl');
+    const record: DecisionRecord = {
+      format: 'jevpolicy.record/v1',
+      decisionId: 'cli-frequency',
+      timestamp: '2026-10-10T08:00:00.000Z',
+      policy: {
+        name: 'cli-frequency',
+        version: 1,
+        fingerprint: 'a'.repeat(64),
+      },
+      facts: {},
+      signals: {},
+      originalDecision: 'approve',
+      matched: { ruleId: 'approve-ready' },
+      provider: {
+        adapter: 'vercel-jev',
+        model: 'typesafe-ai/jev',
+        invoked: true,
+      },
+      mode: 'live',
+    };
+    await writeFile(recordsPath, `${JSON.stringify(record)}\n`, 'utf8');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    const exitCode = await runCli(['frequency', recordsPath, '--json']);
+
+    expect(exitCode).toBe(0);
+    const output: unknown = JSON.parse(String(log.mock.calls[0]?.[0]));
+    expect(output).toMatchObject({
+      selection: { mode: 'live' },
+      summary: { records: 1, policies: 1, ruleMatches: 1 },
+      policies: [
+        {
+          name: 'cli-frequency',
+          matches: [
+            {
+              kind: 'rule',
+              id: 'approve-ready',
+              decision: 'approve',
+              count: 1,
+              rate: 1,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it('rejects an unsupported analysis mode', async () => {
     const error = vi
       .spyOn(console, 'error')

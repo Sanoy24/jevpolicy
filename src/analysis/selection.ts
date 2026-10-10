@@ -18,27 +18,37 @@ export interface SelectedRecords {
   readonly unlabeled: number;
 }
 
-/**
- * Joins the full decision log with its outcomes, then keeps only the records
- * in one mode (live by default) and, optionally, one policy fingerprint, so a
- * report never silently mixes live and shadow decisions.
- */
-export function selectLabeledRecords(
+export interface SelectedDecisionRecords {
+  readonly selection: AnalysisSelection;
+  readonly policies: readonly AnalysisPolicy[];
+  readonly selected: readonly DecisionRecord[];
+}
+
+function includesRecord(
+  record: DecisionRecord,
+  selection: AnalysisSelection,
+): boolean {
+  return (
+    record.mode === selection.mode &&
+    (selection.policyFingerprint === undefined ||
+      record.policy.fingerprint === selection.policyFingerprint)
+  );
+}
+
+/** Selects records without requiring outcome labels. */
+export function selectDecisionRecords(
   records: readonly DecisionRecord[],
-  outcomes: readonly DecisionOutcome[],
   filter: DecisionRecordFilter = {},
-): SelectedRecords {
-  // Join against every record so outcome references stay strictly validated.
-  const joined = joinDecisionOutcomes(records, outcomes);
-  const mode = filter.mode ?? 'live';
-  const includes = (record: DecisionRecord): boolean =>
-    record.mode === mode &&
-    (filter.policyFingerprint === undefined ||
-      record.policy.fingerprint === filter.policyFingerprint);
-
-  const selected = records.filter(includes);
-  const labeled = joined.labeled.filter(({ record }) => includes(record));
-
+): SelectedDecisionRecords {
+  const selection: AnalysisSelection = Object.freeze({
+    mode: filter.mode ?? 'live',
+    ...(filter.policyFingerprint === undefined
+      ? {}
+      : { policyFingerprint: filter.policyFingerprint }),
+  });
+  const selected = records.filter((record) =>
+    includesRecord(record, selection),
+  );
   const policies = new Map<string, AnalysisPolicy>();
   for (const record of selected) {
     const existing = policies.get(record.policy.fingerprint);
@@ -51,12 +61,7 @@ export function selectLabeledRecords(
   }
 
   return Object.freeze({
-    selection: Object.freeze({
-      mode,
-      ...(filter.policyFingerprint === undefined
-        ? {}
-        : { policyFingerprint: filter.policyFingerprint }),
-    }),
+    selection,
     policies: Object.freeze(
       [...policies.values()]
         .sort(
@@ -67,8 +72,32 @@ export function selectLabeledRecords(
         )
         .map((policy) => Object.freeze(policy)),
     ),
-    records: selected.length,
+    selected: Object.freeze(selected),
+  });
+}
+
+/**
+ * Joins the full decision log with its outcomes, then keeps only the records
+ * in one mode (live by default) and, optionally, one policy fingerprint, so a
+ * report never silently mixes live and shadow decisions.
+ */
+export function selectLabeledRecords(
+  records: readonly DecisionRecord[],
+  outcomes: readonly DecisionOutcome[],
+  filter: DecisionRecordFilter = {},
+): SelectedRecords {
+  // Join against every record so outcome references stay strictly validated.
+  const joined = joinDecisionOutcomes(records, outcomes);
+  const selectedRecords = selectDecisionRecords(records, filter);
+  const labeled = joined.labeled.filter(({ record }) =>
+    includesRecord(record, selectedRecords.selection),
+  );
+
+  return Object.freeze({
+    selection: selectedRecords.selection,
+    policies: selectedRecords.policies,
+    records: selectedRecords.selected.length,
     labeled,
-    unlabeled: selected.length - labeled.length,
+    unlabeled: selectedRecords.selected.length - labeled.length,
   });
 }

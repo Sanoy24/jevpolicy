@@ -102,3 +102,34 @@ export interface ConfidenceBandReport {
 export interface ConfidenceBandOptions extends DecisionRecordFilter {
   readonly boundaries?: readonly number[];
 }
+
+export type RuleFrequencyMatchKind = 'precondition' | 'rule' | 'unmatched';
+
+export interface RuleFrequencyMatch {
+  readonly kind: RuleFrequencyMatchKind;
+  readonly id?: string;
+  readonly decision: string;
+  readonly count: number;
+  /** Share of this policy version's selected records. */
+  readonly rate: number;
+}
+
+export interface RuleFrequencyPolicy extends AnalysisPolicy {
+  readonly matches: readonly RuleFrequencyMatch[];
+}
+
+export interface RuleFrequencySummary {
+  readonly records: number;
+  readonly policies: number;
+  readonly preconditionMatches: number;
+  readonly ruleMatches: number;
+  readonly unmatched: number;
+}
+
+export type RuleFrequencyOptions = DecisionRecordFilter;
+
+export interface RuleFrequencyReport {
+  readonly selection: AnalysisSelection;
+  readonly summary: RuleFrequencySummary;
+  readonly policies: readonly RuleFrequencyPolicy[];
+}
